@@ -1,0 +1,10 @@
+[project]
+name = "danbooru-to-your-heroine"
+version = "0.1.0"
+description = "Danbooru投稿を設定ファイルで定義した任意のヒロインに変換し、ComfyUIで連続画像生成するツール群"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "fastapi",
+    "uvicorn[standard]",
+]

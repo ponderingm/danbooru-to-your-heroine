@@ -1,0 +1,13 @@
+# 個人環境設定（config.example.pyをコピーして作成する）
+src/config.py
+
+# 生成物・進捗ファイル
+database/*.json
+!database/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.python-version
+

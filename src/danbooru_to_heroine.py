@@ -1,0 +1,380 @@
+"""
+danbooru_to_heroine.py
+=======================
+DanbooruのURLからタグを収集し、キャラクター特性を config.py で定義した
+任意のヒロインに書き換えたStable Diffusionプロンプトを生成するスクリプト。
+
+ヒロインの定義（identity_tags/body_tags等）は config.py の HEROINES を参照。
+新しいヒロインを追加・編集したい場合は config.py を編集すること。
+
+Usage:
+    uv run python danbooru_to_heroine.py <danbooru_url>
+    uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345
+    uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345 --heroine rinko
+    uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345 --no-nsfw
+"""
+
+import re
+import sys
+import json
+import argparse
+import requests
+
+import config
+
+# ─────────────────────────────────────────────
+# 除去すべき「元キャラ固有タグ」パターン（属性カテゴリはヒロインに依らず共通）
+# ─────────────────────────────────────────────
+CHARACTER_IDENTITY_BLACKLIST = {
+    "skin": [
+        "light skin", "fair skin", "pale skin", "white skin",
+        "tan skin", "brown skin", "dark skin",
+        "dark-skinned female", "dark-skinned male",
+    ],
+    "breasts": [
+        "flat chest", "small breasts", "medium breasts", "large breasts",
+        "huge breasts", "gigantic breasts", "enormous breasts",
+        "big breasts", "massive breasts", "petite",
+    ],
+    "hair_color": [
+        "blonde hair", "brown hair", "red hair", "orange hair",
+        "purple hair", "green hair", "blue hair", "white hair",
+        "silver hair", "pink hair", "grey hair", "gray hair",
+        "black hair", "light brown hair", "dark brown hair",
+        "multicolored hair", "streaked hair", "gradient hair",
+    ],
+    "hair_style": [
+        "long hair", "short hair", "medium hair", "very long hair",
+        "ponytail", "twintails", "twin tails", "braid", "braids",
+        "side ponytail", "double bun", "bun", "hair bun",
+        "bob cut", "pixie cut", "drill hair", "curly hair",
+        "wavy hair", "straight hair", "ahoge",
+        "low twintails", "high ponytail",
+    ],
+    "eye_color": [
+        "blue eyes", "green eyes", "red eyes", "purple eyes",
+        "brown eyes", "golden eyes", "yellow eyes", "silver eyes",
+        "grey eyes", "gray eyes", "black eyes", "heterochromia",
+        "pink eyes", "aqua eyes", "teal eyes",
+    ],
+    "eye_shape": [
+        "tsurime", "tareme",
+    ],
+}
+
+# 画にならない不要メタタグ（投稿管理用タグなど）
+META_TAG_BLACKLIST = {
+    "bad pixiv id", "bad id", "bad twitter id", "bad deviantart id",
+    "bad nicoseiga id", "bad tumblr id", "bad source id",
+    "translated", "translation request", "partial translation",
+    "commentary", "commentary request", "commentary typo", "check commentary", "partial commentary",
+    "personification", "character request", "artist request",
+    "duplicate", "revision", "resized", "non-web source", "third-party edit",
+}
+
+QUALITY_TAGS = {
+    "masterpiece", "best quality", "high quality", "ultra quality",
+    "highly detailed", "detailed", "absurdres", "highres", "4k", "8k", "hdr",
+}
+
+# モザイク等の検閲タグ（画像には映らない/生成時に不要なので除去）
+CENSORING_BLACKLIST = {
+    "censored", "mosaic censoring", "bar censor", "convenient censoring",
+    "character censor", "steam censor", "smoke censor", "light censor",
+    "heart censor", "hair censor", "novelty censor", "shadow censor",
+    "sparkle censor", "soap censor", "water censor", "digital censor",
+    "convenient arm", "unconventional censoring", "uncensored",
+}
+
+# Danbooruのratingフィールド(g/s/q/e) → Illustrious系モデルが学習済みのratingタグ
+RATING_TAG_MAP = {
+    "g": "rating:general",
+    "s": "rating:sensitive",
+    "q": "rating:questionable",
+    "e": "rating:explicit",
+}
+
+DANBOORU_API_BASE = "https://danbooru.donmai.us"
+
+
+# ─────────────────────────────────────────────
+# Danbooru API
+# ─────────────────────────────────────────────
+
+def extract_post_id(url: str) -> int:
+    match = re.search(r"/posts/(\d+)", url)
+    if match:
+        return int(match.group(1))
+    if url.strip().isdigit():
+        return int(url.strip())
+    raise ValueError(f"DanbooruのURLからpost IDを抽出できなかったわ: {url}")
+
+
+def fetch_post(post_id: int, login: str = None, api_key: str = None) -> dict:
+    endpoint = f"{DANBOORU_API_BASE}/posts/{post_id}.json"
+    params = {}
+    if login and api_key:
+        params["login"] = login
+        params["api_key"] = api_key
+    headers = {"User-Agent": "danbooru-to-your-heroine/1.0"}
+    resp = requests.get(endpoint, params=params, headers=headers, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ─────────────────────────────────────────────
+# タグ変換エンジン
+# ─────────────────────────────────────────────
+
+def build_blacklist_set() -> set:
+    bl = set()
+    for tags in CHARACTER_IDENTITY_BLACKLIST.values():
+        for t in tags:
+            bl.add(t.lower())
+    return bl
+
+
+def build_known_character_tags() -> set:
+    """config.HEROINESの全identity_tags + config.OTHER_KNOWN_CHARACTER_TAGSを統合した既知キャラタグ集合"""
+    tags = set(config.OTHER_KNOWN_CHARACTER_TAGS)
+    for dna in config.HEROINES.values():
+        for t in dna.get("identity_tags", []):
+            tags.add(t.replace("_", " ").lower())
+    return tags
+
+
+def get_heroine_dna(heroine: str) -> dict:
+    return config.HEROINES.get(heroine, config.HEROINES[config.DEFAULT_HEROINE])
+
+
+def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
+                            include_artist: bool = False):
+    if heroine is None:
+        heroine = config.DEFAULT_HEROINE
+    dna = get_heroine_dna(heroine)
+    blacklist = build_blacklist_set()
+    known_character_tags = build_known_character_tags()
+
+    general_tags = set(post.get("tag_string_general", "").split())
+    character_tags = set(post.get("tag_string_character", "").split())
+    copyright_tags = set(post.get("tag_string_copyright", "").split())
+    artist_tags = set(post.get("tag_string_artist", "").split())
+    meta_tags = set(post.get("tag_string_meta", "").split())
+
+    removed_tags = []
+    situation_tags = []
+
+    # キャラクタータグ → 全除去（ヒロインIDで置換）
+    for tag in character_tags:
+        removed_tags.append(tag.replace("_", " "))
+
+    # 著作権タグ → config.SERIES_TAG_KEEP_KEYWORDSに合致するものだけ保持
+    keep_keywords = [kw.lower() for kw in config.SERIES_TAG_KEEP_KEYWORDS]
+    for tag in copyright_tags:
+        tag_norm = tag.replace("_", " ").lower()
+        if keep_keywords and any(kw in tag_norm for kw in keep_keywords):
+            situation_tags.append(tag.replace("_", " "))
+        else:
+            removed_tags.append(tag.replace("_", " "))
+
+    # アーティストタグ → オプションで保持（デフォルトは除外、未取得時はDNAのデフォルトにフォールバック）
+    if include_artist:
+        if artist_tags:
+            for tag in artist_tags:
+                situation_tags.append(f"artist:{tag.replace('_', ' ')}")
+        else:
+            situation_tags.extend(dna.get("artist_tags", []))
+    else:
+        for tag in artist_tags:
+            removed_tags.append(f"artist:{tag.replace('_', ' ')}")
+
+    # メタタグ → 不要な投稿管理タグを除去して保持
+    for tag in meta_tags:
+        tag_norm = tag.replace("_", " ").lower()
+        if tag_norm in META_TAG_BLACKLIST:
+            removed_tags.append(tag_norm)
+            continue
+        situation_tags.append(tag.replace("_", " "))
+
+    # レーティングタグ → post側のrating値をIllustrious系のrating:xタグとして保持
+    rating_code = post.get("rating")
+    rating_tag = RATING_TAG_MAP.get(rating_code)
+    if rating_tag:
+        if not nsfw and rating_code in ("q", "e"):
+            situation_tags.append("rating:general")
+        else:
+            situation_tags.append(rating_tag)
+
+    # NSFWキーワード
+    nsfw_keywords = [
+        "sex", "nude", "naked", "nipple", "vagina", "penis", "cum",
+        "ejaculation", "orgasm", "pussy", "erect", "rape", "bondage",
+        "penetration", "anal", "oral", "blowjob", "handjob", "fellatio",
+        "cunnilingus", "masturbat", "tentacle", "gangbang",
+    ]
+
+    # 一般タグ → ブラックリスト除去 → 構図・服装として保持
+    for tag in general_tags:
+        tag_norm = tag.replace("_", " ").lower()
+
+        if tag_norm in blacklist:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in CENSORING_BLACKLIST:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in known_character_tags:
+            removed_tags.append(tag_norm)
+            continue
+
+        if not nsfw and any(kw in tag_norm for kw in nsfw_keywords):
+            removed_tags.append(tag_norm)
+            continue
+
+        situation_tags.append(tag.replace("_", " "))
+
+    identity_tags = dna["identity_tags"] + dna["body_tags"]
+    return identity_tags, situation_tags, removed_tags
+
+
+def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list = None) -> str:
+    if quality_prefix is None:
+        quality_prefix = ["masterpiece", "best quality", "highly detailed"]
+
+    quality_in_situation = [t for t in situation_tags if t.lower() in QUALITY_TAGS]
+    rest_situation = [t for t in situation_tags if t.lower() not in QUALITY_TAGS]
+
+    all_quality = quality_prefix[:]
+    for t in quality_in_situation:
+        if t not in all_quality:
+            all_quality.append(t)
+
+    parts = all_quality + identity_tags + rest_situation
+
+    seen = set()
+    deduped = []
+    for p in parts:
+        key = p.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(p)
+
+    return ", ".join(deduped)
+
+
+# ─────────────────────────────────────────────
+# メイン処理
+# ─────────────────────────────────────────────
+
+def run(url: str, heroine: str = None, login: str = None,
+        api_key: str = None, nsfw: bool = True, verbose: bool = False,
+        include_artist: bool = False) -> str:
+    if heroine is None:
+        heroine = config.DEFAULT_HEROINE
+    heroine_name = get_heroine_dna(heroine)["name"]
+    print(f"\n⚡ Danbooru → {heroine_name} プロンプト変換", file=sys.stderr)
+    print(f"  URL: {url}", file=sys.stderr)
+
+    post_id = extract_post_id(url)
+    print(f"  Post ID: {post_id}", file=sys.stderr)
+
+    print(f"  Danbooru API にアクセス中...", file=sys.stderr)
+    post = fetch_post(post_id, login=login, api_key=api_key)
+
+    all_tags = post.get("tag_string", "").split()
+    n_char = len(post.get("tag_string_character", "").split())
+    n_gen = len(post.get("tag_string_general", "").split())
+    n_copy = len(post.get("tag_string_copyright", "").split())
+    n_art = len(post.get("tag_string_artist", "").split())
+    n_meta = len(post.get("tag_string_meta", "").split())
+    print(f"  取得タグ数: {len(all_tags)} "
+          f"(キャラ:{n_char} 一般:{n_gen} 著作権:{n_copy} アーティスト:{n_art} メタ:{n_meta})",
+          file=sys.stderr)
+
+    if verbose:
+        char_tags = post.get("tag_string_character", "")
+        print(f"\n--- 元キャラタグ ---\n  {char_tags}", file=sys.stderr)
+        general_preview = post.get("tag_string_general", "")[:400]
+        print(f"\n--- 元 general タグ (先頭400文字) ---\n  {general_preview}...", file=sys.stderr)
+
+    identity_tags, situation_tags, removed_tags = mutate_tags_to_heroine(
+        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist
+    )
+
+    if verbose:
+        print(f"\n--- 除去タグ ({len(removed_tags)}件) ---", file=sys.stderr)
+        print(f"  {', '.join(removed_tags[:60])}", file=sys.stderr)
+        print(f"\n--- 追加 Identity タグ ---", file=sys.stderr)
+        print(f"  {', '.join(identity_tags)}", file=sys.stderr)
+
+    prompt = build_prompt(identity_tags, situation_tags)
+    return prompt
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="⚡ Danbooru URL → お好みのヒロイン Stable Diffusion プロンプト変換ツール",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument("url", help="Danbooru の投稿 URL")
+    parser.add_argument(
+        "--heroine", "-H",
+        choices=list(config.HEROINES.keys()),
+        default=config.DEFAULT_HEROINE,
+        help=f"変換先ヒロイン (デフォルト: {config.DEFAULT_HEROINE}) [{', '.join(config.HEROINES.keys())}]",
+    )
+    parser.add_argument("--login", "-l", default=None, help="Danbooru ログイン名（任意）")
+    parser.add_argument("--api-key", "-k", default=None, help="Danbooru API キー（任意）")
+    parser.add_argument("--no-nsfw", action="store_true", help="NSFWタグを除去する")
+    parser.add_argument("--include-artist", action="store_true", help="artist:タグをプロンプトに含める（デフォルトは除外）")
+    parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログを表示する")
+    parser.add_argument("--json", action="store_true", dest="output_json", help="JSON 形式で出力する")
+
+    args = parser.parse_args()
+
+    try:
+        prompt = run(
+            url=args.url,
+            heroine=args.heroine,
+            login=args.login,
+            api_key=args.api_key,
+            nsfw=not args.no_nsfw,
+            verbose=args.verbose,
+            include_artist=args.include_artist,
+        )
+
+        if args.output_json:
+            print(json.dumps({"url": args.url, "heroine": args.heroine, "prompt": prompt},
+                             ensure_ascii=False, indent=2))
+        else:
+            heroine_name = get_heroine_dna(args.heroine)["name"]
+            print(f"\n{'=' * 60}")
+            print(f"⚡ {heroine_name} プロンプト")
+            print("=" * 60)
+            print(prompt)
+            print("=" * 60)
+
+    except requests.HTTPError as e:
+        print(f"\n[ERROR] Danbooru API エラー: {e}", file=sys.stderr)
+        if hasattr(e, "response"):
+            if e.response.status_code == 403:
+                print("  → 認証が必要な投稿かも。--login と --api-key を指定してみなさいよ", file=sys.stderr)
+            elif e.response.status_code == 404:
+                print("  → 投稿が見つからなかったわ。URLを確認して", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"\n[ERROR] {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n[ERROR] 予期せぬエラー: {e}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

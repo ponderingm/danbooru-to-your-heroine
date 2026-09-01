@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+uv.lock
+
+# 個人環境設定は実行時にボリュームマウントする（イメージに焼き込まない）
+src/config.py
+
+# 生成物・進捗ファイル
+database/*.json
+
+# クライアント側スクリプト（コンテナ実行には不要）
+tampermonkey/

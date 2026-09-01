@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>danbooru-to-your-heroine ビューア</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>danbooru-to-your-heroine</h1>
+  <p class="subtitle">生成履歴を確認し、そのまま再生成できるビューア</p>
+</header>
+
+<main>
+  <section id="generate-form" class="panel">
+    <h2>新規生成</h2>
+    <form id="form">
+      <label>
+        Danbooru投稿URL
+        <input type="url" id="f-url" placeholder="https://danbooru.donmai.us/posts/12345" required>
+      </label>
+      <div class="form-row">
+        <label>
+          ヒロイン
+          <select id="f-heroine"></select>
+        </label>
+        <label>
+          モデル
+          <select id="f-model">
+            <option value="illustrious">illustrious</option>
+            <option value="anima">anima</option>
+            <option value="animagine">animagine</option>
+          </select>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="f-nsfw" checked>
+          NSFW
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="f-custom">
+          custom生成
+        </label>
+      </div>
+      <button type="submit" id="f-submit">生成する</button>
+    </form>
+    <p id="form-status" class="status"></p>
+  </section>
+
+  <section class="panel">
+    <div class="gallery-header">
+      <h2>生成履歴</h2>
+      <button id="reload-btn" type="button">再読み込み</button>
+    </div>
+    <div id="gallery" class="gallery"></div>
+  </section>
+</main>
+
+<div id="lightbox" class="lightbox hidden">
+  <button type="button" id="lightbox-close" class="lightbox-close" aria-label="閉じる">×</button>
+  <img id="lightbox-img" src="" alt="拡大表示">
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
