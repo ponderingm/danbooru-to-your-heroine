@@ -93,6 +93,16 @@ def is_realistic_style(post: dict) -> bool:
     return bool((general_tags | meta_tags) & style_tags)
 
 
+def is_blacklisted(post: dict) -> bool:
+    """config.GENERATION_BLACKLIST_TAGSに合致するタグ（例: グロ系）を含むかを判定する
+    （自動バッチ生成専用のスキップ判定。手動変換(danbooru_to_heroine.py/⁄convert/⁄generate)には適用しない）"""
+    blacklist = {t.replace("_", " ").lower() for t in getattr(config, "GENERATION_BLACKLIST_TAGS", set())}
+    if not blacklist:
+        return False
+    post_tags = {t.replace("_", " ").lower() for t in post.get("tag_string", "").split()}
+    return bool(post_tags & blacklist)
+
+
 def search_posts(tags: str, limit: int, page: int, login: str = None, api_key: str = None) -> list:
     """タグ検索で投稿一覧を取得（サイト表示と同じ新着順=上から順）"""
     endpoint = f"{DANBOORU_API_BASE}/posts.json"
@@ -206,7 +216,8 @@ def process_post(post: dict, idx: int, total: int, search_slug: str, negative_te
                   heroine: str, nsfw: bool, include_artist: bool, model: str, checkpoint: str,
                   width: int, height: int, timeout: int, solo_girl_only: bool, auto_canvas: bool,
                   done_ids: set, progress: dict, use_custom: bool = False,
-                  skip_realistic: bool = True, local_filters: dict = None) -> int:
+                  skip_realistic: bool = True, local_filters: dict = None, artist_mode: str = None,
+                  skip_blacklisted: bool = True) -> int:
     """1件の投稿を判定・変換・生成する。生成した画像枚数を返す（スキップ時は0）"""
     post_id = post.get("id")
     if post_id in done_ids:
@@ -234,8 +245,15 @@ def process_post(post: dict, idx: int, total: int, search_slug: str, negative_te
         save_progress(progress)
         return 0
 
+    if skip_blacklisted and is_blacklisted(post):
+        print(f"  [{idx}/{total}] post {post_id}: スキップ（GENERATION_BLACKLIST_TAGSに合致）")
+        done_ids.add(post_id)
+        progress["done_post_ids"] = sorted(done_ids)
+        save_progress(progress)
+        return 0
+
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
-        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist
+        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist, artist_mode=artist_mode
     )
     base_prompt = build_prompt(identity_tags, situation_tags)
     prompt_text = adapt_prompt(base_prompt, model_type=model, is_h_scene=nsfw)
@@ -281,7 +299,7 @@ def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_a
         model: str, checkpoint: str, width: int, height: int,
         login: str, api_key: str, resume: bool, timeout: int, solo_girl_only: bool = True,
         auto_canvas: bool = True, use_custom: bool = False, skip_realistic: bool = True,
-        until_exhausted: bool = False) -> None:
+        until_exhausted: bool = False, artist_mode: str = None, skip_blacklisted: bool = True) -> None:
     progress = load_progress() if resume else {"done_post_ids": []}
     done_ids = set(progress.get("done_post_ids", []))
 
@@ -328,7 +346,8 @@ def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_a
                 model=model, checkpoint=checkpoint, width=width, height=height,
                 timeout=timeout, solo_girl_only=solo_girl_only, auto_canvas=auto_canvas,
                 done_ids=done_ids, progress=progress, use_custom=use_custom,
-                skip_realistic=skip_realistic, local_filters=local_filters,
+                skip_realistic=skip_realistic, local_filters=local_filters, artist_mode=artist_mode,
+                skip_blacklisted=skip_blacklisted,
             )
             if target_generated is not None and total_generated >= target_generated:
                 break
@@ -343,7 +362,7 @@ def run_lucky(search: str, limit: int, heroine: str, nsfw: bool, include_artist:
               model: str, checkpoint: str, width: int, height: int,
               login: str, api_key: str, resume: bool, timeout: int, solo_girl_only: bool = True,
               auto_canvas: bool = True, interval: float = 2.0, use_custom: bool = False,
-              skip_realistic: bool = True) -> None:
+              skip_realistic: bool = True, artist_mode: str = None, skip_blacklisted: bool = True) -> None:
     """I'm Feeling Lucky: random:Nで無限に投稿を引き当てて生成し続ける（Ctrl+Cで停止）"""
     progress = load_progress() if resume else {"done_post_ids": []}
     done_ids = set(progress.get("done_post_ids", []))
@@ -396,7 +415,8 @@ def run_lucky(search: str, limit: int, heroine: str, nsfw: bool, include_artist:
                 model=model, checkpoint=checkpoint, width=width, height=height,
                 timeout=timeout, solo_girl_only=solo_girl_only, auto_canvas=auto_canvas,
                 done_ids=done_ids, progress=progress, use_custom=use_custom,
-                skip_realistic=skip_realistic, local_filters=local_filters,
+                skip_realistic=skip_realistic, local_filters=local_filters, artist_mode=artist_mode,
+                skip_blacklisted=skip_blacklisted,
             )
 
         if new_in_round == 0:
@@ -418,6 +438,9 @@ def main():
                          help=f"変換先ヒロイン（デフォルト: {config.DEFAULT_HEROINE}）")
     parser.add_argument("--no-nsfw", action="store_true", help="NSFWタグを除去する")
     parser.add_argument("--include-artist", action="store_true", help="artist:タグをプロンプトに含める")
+    parser.add_argument("--artist-mode", choices=["keep", "override", "none"], default=None,
+                         help="画風(artistタグ)の扱い: keep=元投稿優先(無ければヒロインのartist_tags) / "
+                              "override=常にヒロインのartist_tagsを使う / none=完全除去（省略時は--include-artistから決定）")
     parser.add_argument("--model", choices=["illustrious", "anima", "animagine"], default="illustrious",
                          help="生成モデル構文（デフォルト: illustrious）")
     parser.add_argument("--checkpoint", default=config.DEFAULT_CHECKPOINT,
@@ -434,6 +457,8 @@ def main():
                          help="Danbooru元画像のアスペクト比に合わせて約1024x1024に自動調整する機能を無効化し、常に--width/--heightを使う")
     parser.add_argument("--allow-realistic", action="store_true",
                          help="実写・3DCG調(photorealistic/3d/realistic等)の投稿も生成対象に含める（デフォルトは低品質になりやすいため除外）")
+    parser.add_argument("--allow-blacklisted", action="store_true",
+                         help="config.GENERATION_BLACKLIST_TAGSに合致する投稿も生成対象に含める（デフォルトはスキップ）")
     parser.add_argument("--all", action="store_true", dest="until_exhausted",
                          help="--limit/--pagesの目標枚数・ページ上限を無視し、検索条件に合致する投稿が尽きる（Danbooruが空のページを返す）まで全て処理する")
     parser.add_argument("--lucky", action="store_true",
@@ -458,7 +483,8 @@ def main():
                 login=args.login, api_key=args.api_key, resume=not args.no_resume, timeout=args.timeout,
                 solo_girl_only=not args.allow_multi_girl, auto_canvas=not args.no_auto_canvas,
                 interval=args.lucky_interval, use_custom=args.use_custom,
-                skip_realistic=not args.allow_realistic,
+                skip_realistic=not args.allow_realistic, artist_mode=args.artist_mode,
+                skip_blacklisted=not args.allow_blacklisted,
             )
         else:
             run(
@@ -468,7 +494,8 @@ def main():
                 login=args.login, api_key=args.api_key, resume=not args.no_resume, timeout=args.timeout,
                 solo_girl_only=not args.allow_multi_girl, auto_canvas=not args.no_auto_canvas,
                 use_custom=args.use_custom, skip_realistic=not args.allow_realistic,
-                until_exhausted=args.until_exhausted,
+                until_exhausted=args.until_exhausted, artist_mode=args.artist_mode,
+                skip_blacklisted=not args.allow_blacklisted,
             )
     except requests.HTTPError as e:
         print(f"\n[ERROR] Danbooru API エラー: {e}", file=sys.stderr)

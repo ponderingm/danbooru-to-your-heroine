@@ -44,7 +44,12 @@ HEROINES = {
         "body_tags": [                                    # 体格・髪型・瞳などの特徴タグ
             "fair skin", "medium breasts", "long hair", "blue eyes",
         ],
-        "artist_tags": [],                                # (任意) アーティストタグ未取得時のフォールバック
+        "artist_tags": [],                                # (任意) artist_mode=keepのフォールバック/overrideで常時使用
+
+        # 以下は全て任意。省略時はリクエスト側の指定 or グローバル設定(config.DEFAULT_CHECKPOINT等)を使う
+        "default_model": "illustrious",                   # このヒロインで生成する際のデフォルトモデル
+        "default_checkpoint": "my_checkpoint.safetensors", # このヒロインで生成する際のデフォルトcheckpoint
+        "default_negative_extra": "extra negative words", # ネガティブプロンプトに追記するヒロイン固有ワード
     },
 }
 DEFAULT_HEROINE = "my_heroine"   # --heroine 省略時に使うキー
@@ -54,6 +59,13 @@ SERIES_TAG_KEEP_KEYWORDS = []
 
 # HEROINESに登録していない「その他の既知キャラクタータグ」（混入時は常に除去）
 OTHER_KNOWN_CHARACTER_TAGS = set()
+
+# 追加パージリスト：ここに書いたタグはプロンプトから除去するが、画像生成自体は行う（例: speech bubble等の画面ノイズ系タグ）
+EXTRA_PURGE_TAGS = set()
+
+# 自動バッチ生成（CLIの danbooru_search_batch_generator.py / APIの /batch/start）専用の追加ブラックリスト。
+# ここに書いたタグを含む投稿は自動生成時にスキップする（例: guro等）。手動変換(danbooru_to_heroine.py単体実行・/convert・/generate)には適用されない
+GENERATION_BLACKLIST_TAGS = set()
 ```
 
 `--heroine` には `HEROINES` に登録したキーを指定する。
@@ -93,9 +105,11 @@ uv run python src/danbooru_search_batch_generator.py "micro_bikini" --custom
 |---|---|
 | `--heroine {config.pyのHEROINESキー}` | 変換先ヒロイン（デフォルト: `config.DEFAULT_HEROINE`） |
 | `--model {illustrious,anima,animagine}` | 生成モデル構文 |
+| `--artist-mode {keep,override,none}` | artistタグの扱い（`keep`=元投稿優先+ヒロインの`artist_tags`にフォールバック / `override`=常にヒロインの`artist_tags` / `none`=完全除去。省略時は`--include-artist`の有無から決まる） |
 | `--no-nsfw` | NSFWタグを除去 |
 | `--allow-multi-girl` | ヒロインが複数人登場する投稿も対象に含める |
 | `--allow-realistic` | 実写・3DCG調の投稿も対象に含める |
+| `--allow-blacklisted` | `config.py`の`GENERATION_BLACKLIST_TAGS`に合致する投稿も対象に含める（デフォルトはスキップ） |
 | `--no-auto-canvas` | 元画像アスペクト比に合わせた自動キャンバスサイズ調整を無効化 |
 | `--all` | 検索条件に合致する投稿が尽きるまで全件処理 |
 | `--lucky` / `--lucky-interval` | ランダム抽出を無限ループ生成 |
@@ -129,19 +143,31 @@ uv run python src/server.py
 | `GET` | `/` | Webビューア（生成履歴の閲覧・新規生成・再生成） |
 | `GET` | `/heroines` | `config.HEROINES` の一覧を返す |
 | `POST` | `/convert` | URLからプロンプト文字列のみ生成（画像生成なし） |
-| `POST` | `/generate` | 変換 + ComfyUIで画像生成し、`database/generated_manifest.json` に記録 |
-| `GET` | `/images` | 生成済み画像のmanifest一覧（新しい順） |
+| `POST` | `/generate` | 変換 + ComfyUI画像生成を優先度付きキューに投入し、即座に`{"job_id": ..., "status": "queued"}`を返す |
+| `GET` | `/jobs/{job_id}` | `/generate`ジョブの状態（`queued`/`running`/`done`/`error`）と結果を取得（404の場合はジョブ不明） |
+| `GET` | `/images` | 生成済み画像のmanifest一覧。`limit`/`offset`でページネーション、`heroine`/`model`/`date_from`/`date_to`（`YYYY-MM-DD`）で絞り込み可能。レスポンスは`{"total": ..., "entries": [...]}` |
+| `DELETE` | `/images/{entry_id}` | 生成履歴エントリとその画像ファイルを削除 |
+| `POST` | `/generated_posts` | `post_ids`の配列を渡し、既にmanifestに生成済み記録がある`post_id`だけ`{"generated": [...]}`で返す（Tampermonkeyの生成済みバッジ表示に使用） |
+| `POST` | `/batch/start` | 検索条件ベースの自動バッチ生成を開始（実行中の設定は同時に1つのみ、409で拒否） |
+| `POST` | `/batch/stop` | 自動バッチ生成を停止 |
+| `GET` | `/batch/status` | 自動バッチ生成の状態（`running`/`total_checked`/`total_generated`/`last_error`等）を取得 |
 | `GET` | `/output/{filename}` | 生成画像の静的配信 |
 
-`danbooru_search_batch_generator.py`は`database/danbooru_search_batch_progress.json`でpost_id単位に生成済み投稿をスキップするが、この`/generate`（APIサーバー・Webビューア・Tampermonkeyスクリプト経由）はその進捗ファイルを一切参照しないため、同じ投稿・同じヒロインを何度でも再生成できる。
+`danbooru_search_batch_generator.py`は`database/danbooru_search_batch_progress.json`でpost_id単位に生成済み投稿をスキップするが、この`/generate`（APIサーバー・Webビューア・Tampermonkeyスクリプト経由）はその進捗ファイルを一切参照しないため、同じ投稿・同じヒロインを何度でも再生成できる（一方`/batch/start`の自動バッチ生成は`database/generated_manifest.json`を見て重複をスキップする。後述）。
+
+生成は単一のバックグラウンドワーカースレッドが優先度付きキューから順に取り出して実行する。Webビューア/Tampermonkey経由の手動`/generate`は優先度（高）、`/batch/start`の自動バッチ生成のジョブは優先度（低）で投入されるため、バッチ生成が裏で動いていても手動生成は今実行中のジョブが終わった直後に必ず割り込んで先に処理される（実行中のジョブ自体が中断されることはない）。`/generate`はPOST直後に返る`job_id`を使って`GET /jobs/{job_id}`をポーリングし、`status`が`"done"`になったら`result`フィールドに旧来の生成結果（`duration_sec`込み）が入る。`status`が`"error"`の場合は`error`フィールドにエラーメッセージが入る。ジョブ状態・バッチ状態はプロセスメモリ上にのみ保持（ジョブは最大200件、古い完了済みものから間引く）なので、サーバー再起動で消える。
+
+### 自動バッチ生成
+
+`POST /batch/start`にDanbooru検索クエリ（`danbooru_search_batch_generator.py`と同じ構文。`order:`/`rating:`/除外タグ等も使える）とヒロイン・モデル・artist_mode等を渡すと、その検索条件に合致する投稿を新しい順にチェックし続け、`generated_manifest.json`に記録の無いもの（かつ`config.py`の`GENERATION_BLACKLIST_TAGS`に合致しないもの）だけを優先度（低）でジョブキューに投入するワーカースレッドが起動する。検索結果を使い切ったら60秒待って新着をチェックし直す（無限ループ、Ctrl+C相当は`POST /batch/stop`）。Webビューアの「自動バッチ生成」パネルから開始・停止・進捗確認ができる。
 
 ### Webビューア
 
-サーバー起動後、ブラウザで `http://127.0.0.1:8000/` を開くと、Danbooru投稿URLを入力して直接生成したり、生成履歴（`/images`）を一覧してカードの「🔁 再生成」ボタンから同じ設定（ヒロイン・モデル・NSFW・custom等）で再生成したりできる。サムネイルをクリックすると画像を拡大表示できる（もう一度クリックまたはEscで閉じる）。静的ファイルは [src/web/](src/web/) にある（`index.html` / `style.css` / `app.js`、追加のビルド不要）。
+サーバー起動後、ブラウザで `http://127.0.0.1:8000/` を開くと、Danbooru投稿URLを入力して直接生成したり、生成履歴（`/images`）を一覧してカードの「🔁 再生成」ボタンから同じ設定（ヒロイン・モデル・artistタグ・NSFW・custom等）で再生成したりできる。サムネイルをクリックすると画像を拡大表示できる（もう一度クリックまたはEscで閉じる）。生成中はジョブをポーリングして進捗を待つため画面がブロックされない。生成履歴はヒロイン・モデル・期間で絞り込み、「もっと見る」でページネーションでき、各カードの「🗑 削除」から履歴・画像ファイルを削除できる。静的ファイルは [src/web/](src/web/) にある（`index.html` / `style.css` / `app.js`、追加のビルド不要）。
 
 ### Tampermonkeyスクリプト
 
-[tampermonkey/danbooru-to-heroine.user.js](tampermonkey/danbooru-to-heroine.user.js) をTampermonkeyに登録すると、Danbooruの投稿ページ（`https://danbooru.donmai.us/posts/*`）右下にヒロイン・モデル・NSFW・custom生成を選べる生成パネルが表示され、その場でAPIサーバーの`/generate`を呼び出せる。
+[tampermonkey/danbooru-to-heroine.user.js](tampermonkey/danbooru-to-heroine.user.js) をTampermonkeyに登録すると、Danbooruの投稿ページ（`https://danbooru.donmai.us/posts/*`）右下にヒロイン・モデル・artistタグ・NSFW・custom生成を選べる生成パネルが表示され、その場でAPIサーバーの`/generate`を呼び出せる（内部では`/jobs/{job_id}`をポーリングして完了を待つ）。また、投稿ページ・一覧/検索結果ページ（`https://danbooru.donmai.us/posts*`）の両方で、`/generated_posts`への問い合わせにより既にヒロイン化生成済みの投稿にはサムネイル左上に「✅ 生成済み」バッジ（投稿ページではパネル上部にも通知）が表示される。
 
 - 初回はパネルの ⚙️ からAPIサーバーのURL（デフォルト `http://127.0.0.1:8000`。別ホストで動かす場合はLAN上のURLに変更する）を設定する。
 - サーバー側の `config.CORS_ORIGINS` に `https://danbooru.donmai.us` が含まれている必要がある（`config.example.py`にデフォルトで設定済み）。
@@ -177,11 +203,7 @@ docker run --network host \
 現状は基本的なプロトタイプ（単一投稿変換・検索バッチ・APIサーバー・Webビューア・Tampermonkeyボタン）が一通り動く段階。以下は未着手のアイデア・改善候補（優先度・要否は今後判断）。
 
 **Webビューア**
-- ページネーション/無限スクロール（現状`/images?limit=`で件数を絞るのみ）
-- ヒロイン・モデル・日付での絞り込みフィルタ
-- 履歴エントリの削除機能（`generated_manifest.json`からの削除・画像ファイル削除）
 - 再生成前にプロンプトを手動編集できるオプション
-- 生成中（ComfyUI処理中）のリアルタイム進捗表示（現状は完了まで応答をブロックして待つだけ）
 
 **Tampermonkeyスクリプト**
 - Danbooruの検索結果一覧ページから複数投稿をまとめて生成キューに投入する機能
@@ -189,16 +211,13 @@ docker run --network host \
 - API_BASEの初期値をインストール時に案内する設定UIの改善
 
 **APIサーバー**
-- 認証（APIキー等）の追加。現状は`CORS_ORIGINS`のみでLAN外からの想定利用は考慮していない
-- `/generate`の非同期化（ジョブキュー + WebSocket/ポーリングでの進捗通知）。現状は生成完了までリクエストをブロックする作りで、ComfyUI側が詰まると素直にタイムアウトする
-- `/images`のページネーション（`limit`のみで`offset`が無い）
-- 履歴削除・再生成失敗時のリトライ等の管理系エンドポイント
+- 優先度（低）：認証（APIキー等）の追加。現状は`CORS_ORIGINS`のみでLAN外からの想定利用は考慮していない
+- 優先度（低）：再生成失敗時の自動リトライ等の管理系エンドポイント
 
 **設定まわり**
-- ヒロインごとにデフォルトモデル・ネガティブプロンプト・チェックポイントを上書きできるようにする（現状はグローバル設定のみ）
 - チェックポイント・LoRAのプリセットを複数登録して`--checkpoint-preset`のように切り替えられるようにする
 
 **バッチ生成**
-- 並列生成（現状は1件ずつ逐次処理）
+- 優先度（低）：並列生成（現状は1件ずつ逐次処理）
 - 生成失敗時の自動リトライ
 

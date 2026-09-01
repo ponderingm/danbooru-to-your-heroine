@@ -134,6 +134,12 @@ def build_blacklist_set() -> set:
     return bl
 
 
+def build_purge_set() -> set:
+    """config.EXTRA_PURGE_TAGSを正規化した集合として返す（未定義環境向けにgetattrでフォールバック）
+    ここに含まれるタグはプロンプトから除去されるが、画像生成自体はスキップされない（例: フキダシ等）"""
+    return {t.replace("_", " ").lower() for t in getattr(config, "EXTRA_PURGE_TAGS", set())}
+
+
 def build_known_character_tags() -> set:
     """config.HEROINESの全identity_tags + config.OTHER_KNOWN_CHARACTER_TAGSを統合した既知キャラタグ集合"""
     tags = set(config.OTHER_KNOWN_CHARACTER_TAGS)
@@ -148,11 +154,19 @@ def get_heroine_dna(heroine: str) -> dict:
 
 
 def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
-                            include_artist: bool = False):
+                            include_artist: bool = False, artist_mode: str = None):
+    """
+    artist_mode: "keep"(元投稿のartistタグを使う、無ければdna.artist_tagsへフォールバック) /
+                 "override"(元投稿のartistタグは無視し、常にdna.artist_tagsを使う) /
+                 "none"(artistタグを完全除去)。省略時はinclude_artistから決める(True→keep, False→none)
+    """
     if heroine is None:
         heroine = config.DEFAULT_HEROINE
+    if artist_mode is None:
+        artist_mode = "keep" if include_artist else "none"
     dna = get_heroine_dna(heroine)
     blacklist = build_blacklist_set()
+    purge_set = build_purge_set()
     known_character_tags = build_known_character_tags()
 
     general_tags = set(post.get("tag_string_general", "").split())
@@ -177,14 +191,18 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
         else:
             removed_tags.append(tag.replace("_", " "))
 
-    # アーティストタグ → オプションで保持（デフォルトは除外、未取得時はDNAのデフォルトにフォールバック）
-    if include_artist:
+    # アーティストタグ → artist_modeに応じて維持/上書き/無効化する
+    if artist_mode == "override":
+        situation_tags.extend(dna.get("artist_tags", []))
+        for tag in artist_tags:
+            removed_tags.append(f"artist:{tag.replace('_', ' ')}")
+    elif artist_mode == "keep":
         if artist_tags:
             for tag in artist_tags:
                 situation_tags.append(f"artist:{tag.replace('_', ' ')}")
         else:
             situation_tags.extend(dna.get("artist_tags", []))
-    else:
+    else:  # "none"
         for tag in artist_tags:
             removed_tags.append(f"artist:{tag.replace('_', ' ')}")
 
@@ -192,6 +210,9 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
     for tag in meta_tags:
         tag_norm = tag.replace("_", " ").lower()
         if tag_norm in META_TAG_BLACKLIST:
+            removed_tags.append(tag_norm)
+            continue
+        if tag_norm in purge_set:
             removed_tags.append(tag_norm)
             continue
         situation_tags.append(tag.replace("_", " "))
@@ -218,6 +239,10 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
         tag_norm = tag.replace("_", " ").lower()
 
         if tag_norm in blacklist:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in purge_set:
             removed_tags.append(tag_norm)
             continue
 
@@ -270,7 +295,7 @@ def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list
 
 def run(url: str, heroine: str = None, login: str = None,
         api_key: str = None, nsfw: bool = True, verbose: bool = False,
-        include_artist: bool = False) -> str:
+        include_artist: bool = False, artist_mode: str = None) -> str:
     if heroine is None:
         heroine = config.DEFAULT_HEROINE
     heroine_name = get_heroine_dna(heroine)["name"]
@@ -300,7 +325,7 @@ def run(url: str, heroine: str = None, login: str = None,
         print(f"\n--- 元 general タグ (先頭400文字) ---\n  {general_preview}...", file=sys.stderr)
 
     identity_tags, situation_tags, removed_tags = mutate_tags_to_heroine(
-        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist
+        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist, artist_mode=artist_mode
     )
 
     if verbose:
@@ -329,7 +354,10 @@ def main():
     parser.add_argument("--login", "-l", default=None, help="Danbooru ログイン名（任意）")
     parser.add_argument("--api-key", "-k", default=None, help="Danbooru API キー（任意）")
     parser.add_argument("--no-nsfw", action="store_true", help="NSFWタグを除去する")
-    parser.add_argument("--include-artist", action="store_true", help="artist:タグをプロンプトに含める（デフォルトは除外）")
+    parser.add_argument("--include-artist", action="store_true", help="artist:タグをプロンプトに含める（デフォルトは除外。--artist-mode指定時は無視される）")
+    parser.add_argument("--artist-mode", choices=["keep", "override", "none"], default=None,
+                        help="画風(artistタグ)の扱い: keep=元投稿優先(無ければヒロインのartist_tags) / "
+                             "override=常にヒロインのartist_tagsを使う / none=完全除去（省略時は--include-artistから決定）")
     parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログを表示する")
     parser.add_argument("--json", action="store_true", dest="output_json", help="JSON 形式で出力する")
 
@@ -344,6 +372,7 @@ def main():
             nsfw=not args.no_nsfw,
             verbose=args.verbose,
             include_artist=args.include_artist,
+            artist_mode=args.artist_mode,
         )
 
         if args.output_json:

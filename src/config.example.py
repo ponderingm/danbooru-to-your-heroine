@@ -57,7 +57,13 @@ API_PORT = 8000
 # name:          表示名
 # identity_tags: キャラクターを特定するタグ（キャラ名・作品名など）
 # body_tags:     体格・髪型・瞳などの特徴タグ（元投稿の同カテゴリタグを置き換える）
-# artist_tags:   (任意) アーティストタグ未取得時に使うフォールバック
+# artist_tags:   (任意) artist_mode="keep"で元投稿にartistタグが無い場合のフォールバック、
+#                artist_mode="override"では常にこれが使われる
+# 以下は全て任意（未指定ならグローバル設定/引数の値を使う）。API/CLIで明示指定された値が
+# 常に優先され、ヒロイン側の値はその「省略時のデフォルト」としてのみ働く。
+# default_model:          このヒロインを使うときのデフォルトmodel（illustrious/anima/animagine）
+# default_checkpoint:     このヒロインを使うときのデフォルトcheckpointファイル名
+# default_negative_extra: get_negative_prompt()の結果に追記する、このヒロイン専用の追加ネガティブタグ
 HEROINES = {
     "example_heroine": {
         "name": "サンプルヒロイン",
@@ -66,6 +72,9 @@ HEROINES = {
             "fair skin", "medium breasts", "long hair", "blue eyes",
         ],
         "artist_tags": [],
+        # "default_model": "illustrious",
+        # "default_checkpoint": "your_checkpoint.safetensors",
+        # "default_negative_extra": "example negative tag",
     },
 }
 
@@ -79,3 +88,16 @@ SERIES_TAG_KEEP_KEYWORDS = []
 # HEROINESに定義していない「その他の既知キャラクタータグ」。元投稿に混入している場合、
 # ヒロイン識別タグと衝突しないよう常に除去する
 OTHER_KNOWN_CHARACTER_TAGS = set()
+
+# 追加パージリスト：ここに書いたタグはプロンプトから除去するが、画像生成自体は行う
+# （例: フキダシ等の画面ノイズ系タグ。半角スペース/アンダースコアどちらでも可、大文字小文字区別なし）
+EXTRA_PURGE_TAGS = {
+    "speech bubble",
+}
+
+# 自動バッチ生成（danbooru_search_batch_generator.py / server.pyの/batch/start）専用の追加ブラックリスト。
+# ここに書いたタグを含む投稿は自動生成時にスキップする（例: グロ系タグ）。
+# 手動変換（danbooru_to_heroine.py単体実行・/convert・/generate）には適用されない
+GENERATION_BLACKLIST_TAGS = {
+    "guro",
+}

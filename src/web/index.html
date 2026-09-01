@@ -33,6 +33,14 @@
             <option value="animagine">animagine</option>
           </select>
         </label>
+        <label>
+          artistタグ
+          <select id="f-artist-mode">
+            <option value="none">除去(none)</option>
+            <option value="keep">元投稿優先(keep)</option>
+            <option value="override">ヒロイン固定(override)</option>
+          </select>
+        </label>
         <label class="checkbox">
           <input type="checkbox" id="f-nsfw" checked>
           NSFW
@@ -47,12 +55,96 @@
     <p id="form-status" class="status"></p>
   </section>
 
+  <section id="batch-panel" class="panel">
+    <h2>自動バッチ生成</h2>
+    <p class="hint">検索条件に合致する投稿を裏で自動生成し続ける（重複はmanifestで自動回避）。手動生成は常にこれより優先される。</p>
+    <form id="batch-form">
+      <label>
+        Danbooru検索クエリ
+        <input type="text" id="b-search" placeholder="order:score rating:explicit micro_bikini" required>
+      </label>
+      <div class="form-row">
+        <label>
+          ヒロイン
+          <select id="b-heroine"></select>
+        </label>
+        <label>
+          モデル
+          <select id="b-model">
+            <option value="illustrious">illustrious</option>
+            <option value="anima">anima</option>
+            <option value="animagine">animagine</option>
+          </select>
+        </label>
+        <label>
+          artistタグ
+          <select id="b-artist-mode">
+            <option value="none">除去(none)</option>
+            <option value="keep">元投稿優先(keep)</option>
+            <option value="override">ヒロイン固定(override)</option>
+          </select>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="b-nsfw" checked>
+          NSFW
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="b-custom">
+          custom生成
+        </label>
+      </div>
+      <div class="form-row">
+        <button type="submit" id="b-start-btn">バッチ開始</button>
+        <button type="button" id="b-stop-btn" class="secondary" disabled>停止</button>
+      </div>
+    </form>
+    <p id="batch-status" class="status"></p>
+  </section>
+
   <section class="panel">
     <div class="gallery-header">
       <h2>生成履歴</h2>
       <button id="reload-btn" type="button">再読み込み</button>
     </div>
+    <div class="form-row">
+      <label>
+        ヒロイン絞り込み
+        <select id="filter-heroine">
+          <option value="">すべて</option>
+        </select>
+      </label>
+      <label>
+        モデル絞り込み
+        <select id="filter-model">
+          <option value="">すべて</option>
+          <option value="illustrious">illustrious</option>
+          <option value="anima">anima</option>
+          <option value="animagine">animagine</option>
+        </select>
+      </label>
+      <label>
+        期間(開始)
+        <input type="date" id="filter-date-from">
+      </label>
+      <label>
+        期間(終了)
+        <input type="date" id="filter-date-to">
+      </label>
+      <label>
+        タグ絞り込み(複数可)
+        <select id="filter-tag-select">
+          <option value="">タグを選択して追加</option>
+        </select>
+      </label>
+      <button type="button" id="filter-apply-btn">絞り込む</button>
+      <button type="button" id="filter-reset-btn" class="secondary">リセット</button>
+    </div>
+    <div id="filter-tag-chips" class="tag-chips"></div>
     <div id="gallery" class="gallery"></div>
+    <div class="load-more-row">
+      <button type="button" id="load-more-btn" class="secondary hidden">もっと見る</button>
+      <span id="gallery-count" class="status"></span>
+    </div>
   </section>
 </main>
 

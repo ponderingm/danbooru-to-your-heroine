@@ -8,6 +8,28 @@ ANIMA_RATING_MAP = {
     "explicit": "explicit",
 }
 
+# Anima記法(safe/sensitive/nsfw/explicit) → Illustrious記法(rating:xxx)への逆引き
+# タグ絞り込み等でモデルを問わず同じrating概念を1つのタグとして扱うためのエイリアス
+RATING_TAG_ALIASES = {anima: f"rating:{illustrious}" for illustrious, anima in ANIMA_RATING_MAP.items()}
+
+
+def _dedupe_tags(prompt: str) -> str:
+    """カンマ区切りタグを大小無視で重複排除する（先勝ち、順序維持）。
+    build_prompt()側のmasterpiece/best quality等と、各モデル分岐で追加するクオリティタグが
+    二重に入るのを防ぐ"""
+    seen = set()
+    deduped = []
+    for tag in prompt.split(","):
+        tag = tag.strip()
+        if not tag:
+            continue
+        key = tag.lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(tag)
+    return ", ".join(deduped)
+
+
 def adapt_prompt(raw_prompt, model_type="illustrious", is_h_scene=True):
     """
     モデルアーキテクチャに合わせてプロンプト構文を最適化
@@ -41,18 +63,18 @@ def adapt_prompt(raw_prompt, model_type="illustrious", is_h_scene=True):
         else:
             rating = "explicit" if is_h_scene else "safe"
 
-        return f"score_9, score_8, score_7, masterpiece, best quality, {rating}, {p}"
+        return _dedupe_tags(f"score_9, score_8, score_7, masterpiece, best quality, {rating}, {p}")
 
     elif "animagine" in m:
         # --- 🪄 Animagine XL ---
         rating = "rating:explicit" if is_h_scene else "rating:general"
-        return f"masterpiece, best quality, very aesthetic, absurdres, {rating}, {p}"
+        return _dedupe_tags(f"masterpiece, best quality, very aesthetic, absurdres, {rating}, {p}")
 
     else:
         # --- 🎨 Illustrious-XL / NetaYume ---
         if not p.startswith("masterpiece"):
             p = f"masterpiece, best quality, amazing quality, very aesthetic, absurdres, {p}"
-        return p
+        return _dedupe_tags(p)
 
 def get_negative_prompt(model_type="illustrious"):
     m = model_type.lower()
