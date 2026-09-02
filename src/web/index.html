@@ -77,12 +77,17 @@
               </select>
             </label>
             <label style="flex: 1.1; min-width: 135px; margin: 0; font-size: 0.78rem;">
-              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: comic/monochrome等の元絵画風を保持&#10;カラー化: モノクロ/漫画タグを除去して通常アニメ調&#10;モノクロ漫画: 強制的にcomic/monochrome調">?</span>
+              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: 水彩・漫画・厚塗りなど元絵画風を尊重&#10;標準アニメ調: 画風タグを全除去してセル画アニメ調&#10;その他: 元絵の画風を消去し指定画風へ強制転換">?</span>
               <select id="f-override-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
                 <option value="source">🎨 元絵維持 (Source)</option>
-                <option value="color">🌈 カラー化 (Color)</option>
+                <option value="anime">✨ 標準アニメ調 (Anime)</option>
                 <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
+                <option value="watercolor">💧 水彩画風 (Watercolor)</option>
+                <option value="thick_coating">🖌️ 厚塗り調 (Painterly)</option>
+                <option value="retro_90s">📺 90年代風 (90s retro)</option>
+                <option value="chibi">🧸 ちびキャラ (Chibi)</option>
+                <option value="pixel_art">👾 ドット絵 (Pixel art)</option>
               </select>
             </label>
             <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
@@ -187,12 +192,17 @@
               </select>
             </label>
             <label style="flex: 1.1; min-width: 135px; margin: 0; font-size: 0.78rem;">
-              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: comic/monochrome等の元絵画風を保持&#10;カラー化: モノクロ/漫画タグを除去して通常アニメ調&#10;モノクロ漫画: 強制的にcomic/monochrome調">?</span>
+              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: 水彩・漫画・厚塗りなど元絵画風を尊重&#10;標準アニメ調: 画風タグを全除去してセル画アニメ調&#10;その他: 元絵の画風を消去し指定画風へ強制転換">?</span>
               <select id="b-override-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
                 <option value="source">🎨 元絵維持 (Source)</option>
-                <option value="color">🌈 カラー化 (Color)</option>
+                <option value="anime">✨ 標準アニメ調 (Anime)</option>
                 <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
+                <option value="watercolor">💧 水彩画風 (Watercolor)</option>
+                <option value="thick_coating">🖌️ 厚塗り調 (Painterly)</option>
+                <option value="retro_90s">📺 90年代風 (90s retro)</option>
+                <option value="chibi">🧸 ちびキャラ (Chibi)</option>
+                <option value="pixel_art">👾 ドット絵 (Pixel art)</option>
               </select>
             </label>
             <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
@@ -437,11 +447,16 @@
                   </label>
                   <label style="flex: 1;">
                     🖌️ 画風ポリシー
-                    <span class="help-tip" data-tooltip="Source: 元絵のcomic/monochrome等の画風を尊重&#10;Color: モノクロ/漫画タグを除去して通常アニメ調&#10;Monochrome: 常にcomic/monochrome調">?</span>
+                    <span class="help-tip" data-tooltip="Source: 元絵のcomic/monochrome/水彩等の画風を尊重&#10;Anime: 画風タグを全除去してセル画アニメ調&#10;その他: 常に指定した画風へ強制転換">?</span>
                     <select id="hm-rule-art-style">
                       <option value="source">🎨 元絵維持 (Source)</option>
-                      <option value="color">🌈 カラー化 (Color)</option>
+                      <option value="anime">✨ 標準アニメ調 (Anime)</option>
                       <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
+                      <option value="watercolor">💧 水彩画風 (Watercolor)</option>
+                      <option value="thick_coating">🖌️ 厚塗り調 (Painterly)</option>
+                      <option value="retro_90s">📺 90年代風 (90s retro)</option>
+                      <option value="chibi">🧸 ちびキャラ (Chibi)</option>
+                      <option value="pixel_art">👾 ドット絵 (Pixel art)</option>
                     </select>
                   </label>
                   <label style="flex: 1;">
