@@ -96,6 +96,12 @@ function renderArtistDatalist() {
   artistDatalist.innerHTML = html;
 }
 
+[fArtistInput, bArtistInput, batchSearchInput].forEach(el => {
+  if (!el) return;
+  el.addEventListener("focus", () => el.select());
+});
+
+
 
 const userPurgeInput = document.getElementById("user-purge-input");
 const purgeSaveBtn = document.getElementById("purge-save-btn");

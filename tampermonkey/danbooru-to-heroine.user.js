@@ -541,6 +541,8 @@
     const statusEl = panel.querySelector("#d2h-status");
 
     artistInput.value = getSetting("d2h_last_artist_val", "none");
+    artistInput.addEventListener("focus", () => artistInput.select());
+
 
     generateBtn.addEventListener("click", async () => {
       generateBtn.disabled = true;
@@ -628,6 +630,8 @@
     const statusEl = panel.querySelector("#d2h-status");
 
     artistInput.value = getSetting("d2h_last_artist_val", "none");
+    artistInput.addEventListener("focus", () => artistInput.select());
+
 
     submitBtn.addEventListener("click", async () => {
       const checkboxes = Array.from(document.querySelectorAll(".d2h-select-cb:checked"));
