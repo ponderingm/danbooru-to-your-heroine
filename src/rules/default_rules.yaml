@@ -16,11 +16,18 @@ meta_purge:
   - translated
   - translation request
   - partial translation
+  - check translation
   - commentary
   - commentary request
   - commentary typo
   - check commentary
   - partial commentary
+  - dated commentary
+  - english commentary
+  - chinese commentary
+  - korean commentary
+  - japanese commentary
+  - copyright request
   - personification
   - character request
   - artist request
@@ -31,21 +38,21 @@ meta_purge:
   - non-web source
   - third-party edit
   - third-party source
-  - english commentary
+  - patreon username
+  - deviantart username
+  - twitter username
+  - pixiv username
+  - username
+  - web address
+  - url
+  - logo
 
-# プロンプトから削る画面ノイズ・検閲・透かしタグ
+# プロンプトから削る画面ノイズ・透かし・文字ゴミタグ（convenient censoring等のフェチタグは保持）
 artifact_purge:
-  - censored
   - mosaic censoring
   - bar censor
   - character censor
-  - steam censor
-  - smoke censor
-  - light censor
-  - heart censor
-  - novelty censor
-  - shadow censor
-  - sparkle censor
+  - censored text
   - artist name
   - copyright name
   - cover
@@ -58,10 +65,19 @@ artifact_purge:
   - speech bubble
   - thought bubble
   - sound effect
+  - sound effects
   - colored speech bubble
   - character age
+  - english text
+  - engrish text
+  - chinese text
+  - korean text
+  - japanese text
+  - alt text
+  - sample text
 
 # 品質タグ（モデル標準やプロンプト構築時に制御）
+
 quality_tags:
   - masterpiece
   - best quality
