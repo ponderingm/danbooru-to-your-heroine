@@ -203,7 +203,7 @@ def build_heroine_negative_prompt(heroine: str, base_negative: str) -> str:
 
 def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                             include_artist: bool = False, artist_mode: str = None,
-                            custom_artist: str = None):
+                            custom_artist: str = None, override_rules: dict = None):
     """
     artist_mode: "keep"(元投稿のartistタグを使う、無ければdna.artist_tagsへフォールバック) /
                  "override"(元投稿のartistタグは無視し、常にdna.artist_tagsを使う) /
@@ -303,12 +303,19 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     if rating_tag:
         situation_tags.append(rating_tag)
 
-    override_rules = dna.get("override_rules", {})
+    effective_rules = dict(dna.get("override_rules", {}))
+    if override_rules:
+        for k, v in override_rules.items():
+            if v and v != "default":
+                effective_rules[k] = v
 
-    breasts_mode = override_rules.get("breasts", "strict")
-    costume_mode = override_rules.get("costume", "source")
+    breasts_mode = effective_rules.get("breasts", "strict")
+    skin_mode = effective_rules.get("skin", "strict")
+    costume_mode = effective_rules.get("costume", "source")
 
     detected_source_breasts = set()
+    detected_source_skin = set()
+    skin_tags_set = {"dark skin", "light skin", "pale skin", "fair skin", "white skin", "tan", "tanned", "sun tan", "one-piece tan"}
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:
@@ -321,6 +328,16 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                 detected_source_breasts.add(tag_norm)
                 continue
             else:  # "strict" or default
+                removed_tags.append(tag_norm)
+                continue
+
+        # 肌色判定（オーバーライドルール: strict = ヒロイン固定, source = 元絵維持）
+        if tag_norm in skin_tags_set:
+            if skin_mode == "source":
+                situation_tags.append(tag.replace("_", " "))
+                detected_source_skin.add(tag_norm)
+                continue
+            else:
                 removed_tags.append(tag_norm)
                 continue
 
@@ -354,6 +371,10 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     # 元絵の胸タグが維持(source)された場合、ヒロイン側の胸タグと二重にならないよう除外
     if detected_source_breasts:
         body_tags = [b for b in body_tags if b.replace("_", " ").lower() not in BREAST_TAGS]
+
+    # 元絵の肌色タグが維持(source)された場合、ヒロイン側の肌色タグを除外
+    if detected_source_skin:
+        body_tags = [b for b in body_tags if b.replace("_", " ").lower() not in skin_tags_set]
 
     # 衣装モード判定
     active_costumes = []

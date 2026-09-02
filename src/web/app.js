@@ -21,6 +21,9 @@ const submitBtn = document.getElementById("f-submit");
 const formStatus = document.getElementById("form-status");
 const promptTextarea = document.getElementById("f-prompt");
 const previewBtn = document.getElementById("f-preview-btn");
+const fOverrideBreasts = document.getElementById("f-override-breasts");
+const fOverrideSkin = document.getElementById("f-override-skin");
+const fOverrideCostume = document.getElementById("f-override-costume");
 const comfyStatusEl = document.getElementById("comfy-status");
 const gallery = document.getElementById("gallery");
 const galleryCount = document.getElementById("gallery-count");
@@ -48,6 +51,9 @@ const batchSortSelect = document.getElementById("b-sort");
 const batchLuckyCheckbox = document.getElementById("b-lucky");
 const batchStartBtn = document.getElementById("b-start-btn");
 const batchStopBtn = document.getElementById("b-stop-btn");
+const bOverrideBreasts = document.getElementById("b-override-breasts");
+const bOverrideSkin = document.getElementById("b-override-skin");
+const bOverrideCostume = document.getElementById("b-override-costume");
 const batchStatusEl = document.getElementById("batch-status");
 
 function resolveArtistInput(val) {
@@ -339,6 +345,9 @@ previewBtn.addEventListener("click", async () => {
         heroine: heroineSelect.value,
         backend: backendSelect.value,
         ...artistParams,
+        override_breasts: fOverrideBreasts ? fOverrideBreasts.value : undefined,
+        override_skin: fOverrideSkin ? fOverrideSkin.value : undefined,
+        override_costume: fOverrideCostume ? fOverrideCostume.value : undefined,
       }),
     });
     if (!res.ok) {
@@ -389,6 +398,9 @@ form.addEventListener("submit", async (e) => {
     heroine: heroineSelect.value,
     backend: backendSelect.value,
     ...artistParams,
+    override_breasts: fOverrideBreasts ? fOverrideBreasts.value : undefined,
+    override_skin: fOverrideSkin ? fOverrideSkin.value : undefined,
+    override_costume: fOverrideCostume ? fOverrideCostume.value : undefined,
     prompt_override: promptTextarea.value.trim() || undefined,
   };
   try {
@@ -613,6 +625,9 @@ batchForm.addEventListener("submit", async (e) => {
     heroine: batchHeroineSelect.value,
     backend: batchBackendSelect.value,
     ...batchArtistParams,
+    override_breasts: bOverrideBreasts ? bOverrideBreasts.value : undefined,
+    override_skin: bOverrideSkin ? bOverrideSkin.value : undefined,
+    override_costume: bOverrideCostume ? bOverrideCostume.value : undefined,
     sort: batchSortSelect.value || null,
     lucky: batchLuckyCheckbox.checked,
   };

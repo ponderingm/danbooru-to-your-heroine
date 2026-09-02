@@ -47,6 +47,39 @@
             <input type="text" id="f-artist" list="artist-datalist" placeholder="none (デフォルト), keep, override, または 作家名 (例: wlop)">
           </label>
         </div>
+
+        <!-- ⚡ 生成時オーバーライド（微調整） -->
+        <div class="form-row" style="background: #13151f; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; gap: 12px;">
+          <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-dim); align-self: center; white-space: nowrap;">
+            ⚡ 今回の微調整 <span class="help-tip" data-tooltip="ヒロイン設定のデフォルトルールを、今回の生成時のみ一時的に上書き変更します">?</span>:
+          </span>
+          <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            🍒 胸サイズ
+            <select id="f-override-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="default">設定通り (デフォルト)</option>
+              <option value="strict">🔒 ヒロイン固定 (Strict)</option>
+              <option value="source">🎨 元絵維持 (Source)</option>
+            </select>
+          </label>
+          <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            ☀️ 肌色
+            <select id="f-override-skin" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="default">設定通り (デフォルト)</option>
+              <option value="strict">🔒 ヒロイン固定 (Strict)</option>
+              <option value="source">🎨 元絵維持 (Source)</option>
+            </select>
+          </label>
+          <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            👗 衣装
+            <select id="f-override-costume" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="default">設定通り (デフォルト)</option>
+              <option value="source">👗 元絵衣装</option>
+              <option value="heroine">🦸 ヒロイン衣装</option>
+              <option value="mix">✨ ハイブリッド</option>
+            </select>
+          </label>
+        </div>
+
         <div class="form-row">
           <button type="button" id="f-preview-btn" class="secondary">🔍 プロンプトプレビュー</button>
         </div>
@@ -101,6 +134,38 @@
               <option value="score">スコア順</option>
               <option value="favcount">お気に入り順</option>
               <option value="rank">ランク順</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- ⚡ バッチ時オーバーライド（微調整） -->
+        <div class="form-row" style="background: #13151f; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; gap: 12px;">
+          <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-dim); align-self: center; white-space: nowrap;">
+            ⚡ バッチ微調整 <span class="help-tip" data-tooltip="バッチ生成中の全画像に対して、ヒロイン設定のルールを一時的に上書き変更します">?</span>:
+          </span>
+          <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            🍒 胸サイズ
+            <select id="b-override-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="default">設定通り (デフォルト)</option>
+              <option value="strict">🔒 ヒロイン固定 (Strict)</option>
+              <option value="source">🎨 元絵維持 (Source)</option>
+            </select>
+          </label>
+          <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            ☀️ 肌色
+            <select id="b-override-skin" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="default">設定通り (デフォルト)</option>
+              <option value="strict">🔒 ヒロイン固定 (Strict)</option>
+              <option value="source">🎨 元絵維持 (Source)</option>
+            </select>
+          </label>
+          <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            👗 衣装
+            <select id="b-override-costume" style="padding: 4px 8px; font-size: 0.82rem;">
+              <option value="default">設定通り (デフォルト)</option>
+              <option value="source">👗 元絵衣装</option>
+              <option value="heroine">🦸 ヒロイン衣装</option>
+              <option value="mix">✨ ハイブリッド</option>
             </select>
           </label>
         </div>

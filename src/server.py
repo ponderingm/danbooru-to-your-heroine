@@ -112,6 +112,10 @@ class ConvertRequest(BaseModel):
     backend: Optional[str] = None
     # プロンプトソース: "booru" (デフォルト) / "raw" / "hybrid"
     prompt_source: Optional[str] = "booru"
+    # 生成時の一時オーバーライドルール微調整 ("default" / "strict" / "source", 衣装は "heroine" / "mix" も可)
+    override_breasts: Optional[str] = None
+    override_skin: Optional[str] = None
+    override_costume: Optional[str] = None
 
 
 
@@ -168,9 +172,17 @@ def _convert(req: ConvertRequest):
     except requests.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"API error: {e}")
 
+    adhoc_rules = {}
+    if getattr(req, "override_breasts", None) and req.override_breasts != "default":
+        adhoc_rules["breasts"] = req.override_breasts
+    if getattr(req, "override_skin", None) and req.override_skin != "default":
+        adhoc_rules["skin"] = req.override_skin
+    if getattr(req, "override_costume", None) and req.override_costume != "default":
+        adhoc_rules["costume"] = req.override_costume
+
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
         post, heroine=heroine, include_artist=req.include_artist, artist_mode=req.artist_mode,
-        custom_artist=req.custom_artist,
+        custom_artist=req.custom_artist, override_rules=adhoc_rules,
     )
     base_prompt = build_prompt(identity_tags, situation_tags)
     booru_prompt = adapt_prompt(base_prompt, model_type=model)
@@ -596,6 +608,9 @@ class BatchConfig(BaseModel):
     page_size: int = 20
     sort: Optional[str] = None  # searchにorder:が無い場合に自動付与する並び順（例: score, favcount, rank）
     lucky: bool = False  # I'm Feeling Luckyモード（random:Nで無作為抽出を無限ループ、CLIの--luckyと同等）
+    override_breasts: Optional[str] = None
+    override_skin: Optional[str] = None
+    override_costume: Optional[str] = None
 
 
 BATCH_LOCK = threading.Lock()
@@ -694,6 +709,9 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 url=f"https://danbooru.donmai.us/posts/{post_id}",
                 heroine=cfg.heroine, model=cfg.model, artist_mode=cfg.artist_mode,
                 custom_artist=cfg.custom_artist,
+                override_breasts=cfg.override_breasts,
+                override_skin=cfg.override_skin,
+                override_costume=cfg.override_costume,
                 use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                 width=cfg.width, height=cfg.height, timeout=cfg.timeout,
             )
