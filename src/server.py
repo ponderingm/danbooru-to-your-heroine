@@ -130,6 +130,7 @@ class GenerateRequest(ConvertRequest):
     # 指定時は/convertが自動生成するプロンプトの代わりにこの文字列をそのまま使う
     # （Web UIの「プレビュー→手動編集」フローで使用）
     prompt_override: Optional[str] = None
+    is_batch: bool = False  # 自動バッチ生成によるジョブかどうか（Discord通知の@silent制御等に利用）
 
 
 def _resolve_settings(heroine: str, req: ConvertRequest):
@@ -422,6 +423,7 @@ def _do_generate(req: GenerateRequest) -> dict:
         image_path=first_image_path,
         source_url=req.url,
         duration_sec=duration,
+        silent=bool(getattr(req, "is_batch", False)),
     )
 
     return {**entry, "duration_sec": round(duration, 1)}
@@ -832,6 +834,7 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 override_art_style=cfg.override_art_style,
                 use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                 width=cfg.width, height=cfg.height, timeout=cfg.timeout,
+                is_batch=True,
             )
             job_id = _enqueue_generate_job(req, BATCH_PRIORITY)
 

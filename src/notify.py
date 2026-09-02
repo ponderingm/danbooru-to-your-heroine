@@ -61,8 +61,9 @@ def notify_success(
     image_path: Optional[str] = None,
     source_url: Optional[str] = None,
     duration_sec: Optional[float] = None,
+    silent: bool = False,
 ) -> None:
-    """生成成功通知 (debug, success で送信。画像実体を添付してEmbed表示)"""
+    """生成成功通知 (debug, success で送信。画像実体を添付してEmbed表示。silent=True時は@silentで通知音を抑制)"""
     if not _should_notify("success"):
         return
     webhook_url = getattr(config, "DISCORD_WEBHOOK_URL", "")
@@ -84,10 +85,16 @@ def notify_success(
     # 画像添付のハンドリング
     has_image = bool(include_image and image_path and os.path.exists(image_path))
 
+    payload = {
+        "embeds": [embed],
+    }
+    if silent:
+        payload["content"] = "@silent"
+        payload["flags"] = 4096  # SUPPRESS_NOTIFICATIONS
+
     try:
         if has_image:
             embed["image"] = {"url": "attachment://generated.png"}
-            payload = {"embeds": [embed]}
             with open(image_path, "rb") as f:
                 files = {
                     "files[0]": ("generated.png", f, "image/png"),
@@ -95,7 +102,7 @@ def notify_success(
                 data = {"payload_json": json.dumps(payload)}
                 requests.post(webhook_url, data=data, files=files, timeout=15)
         else:
-            requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
+            requests.post(webhook_url, json=payload, timeout=10)
     except Exception as e:
         print(f"⚠️ [notify.py] Discord通知送信エラー (無視): {e}")
 
