@@ -50,6 +50,7 @@ const batchHeroineSelect = document.getElementById("b-heroine");
 const batchBackendSelect = document.getElementById("b-backend");
 const bArtistInput = document.getElementById("b-artist");
 const batchSortSelect = document.getElementById("b-sort");
+const batchRatingSelect = document.getElementById("b-rating");
 const batchLuckyCheckbox = document.getElementById("b-lucky");
 const batchStartBtn = document.getElementById("b-start-btn");
 const batchStopBtn = document.getElementById("b-stop-btn");
@@ -637,6 +638,7 @@ batchForm.addEventListener("submit", async (e) => {
     override_costume: bOverrideCostume ? bOverrideCostume.value : undefined,
     override_art_style: bOverrideArtStyle ? bOverrideArtStyle.value : undefined,
     sort: batchSortSelect.value || null,
+    rating: batchRatingSelect ? (batchRatingSelect.value || null) : null,
     lucky: batchLuckyCheckbox.checked,
   };
 

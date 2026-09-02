@@ -696,6 +696,7 @@ class BatchConfig(BaseModel):
     interval_sec: float = 1.0
     page_size: int = 20
     sort: Optional[str] = None  # searchにorder:が無い場合に自動付与する並び順（例: score, favcount, rank）
+    rating: Optional[str] = None  # searchにrating:が無い場合に自動付与するレーティング（例: explicit, questionable, sensitive, general）
     lucky: bool = False  # I'm Feeling Luckyモード（random:Nで無作為抽出を無限ループ、CLIの--luckyと同等）
     override_breasts: Optional[str] = None
     override_skin: Optional[str] = None
@@ -726,6 +727,8 @@ def _batch_status_snapshot() -> dict:
 def _batch_worker_loop(cfg: BatchConfig) -> None:
     provider = getattr(cfg, "provider", "danbooru") or "danbooru"
     search = cfg.search
+    if cfg.rating and "rating:" not in search:
+        search = f"rating:{cfg.rating} {search}".strip()
 
     if provider == "gelbooru":
         # Gelbooru用構文: 複数タグ制限がなく、sort:random / sort:score を直接APIに渡せる

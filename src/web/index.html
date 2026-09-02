@@ -140,13 +140,23 @@
           </label>
         </div>
         <div class="form-row">
-          <label style="flex: 1;">
+          <label style="flex: 1.2;">
             ヒロイン
             <select id="b-heroine"></select>
           </label>
-          <label style="flex: 1;">
+          <label style="flex: 1.2;">
             バックエンド
             <select id="b-backend"></select>
+          </label>
+          <label style="flex: 1;">
+            🔞 レーティング <span class="help-tip" data-tooltip="検索時のレーティング絞り込み&#10;未指定: 全年齢〜R18すべて&#10;Explicit: R-18のみ&#10;Questionable: えっち/R-15&#10;General: 全年齢のみ">?</span>
+            <select id="b-rating">
+              <option value="">指定なし (すべて)</option>
+              <option value="explicit">🔞 Explicit (R-18)</option>
+              <option value="questionable">⚠️ Questionable (R-15)</option>
+              <option value="sensitive">👙 Sensitive (露出)</option>
+              <option value="general">🟢 General (全年齢)</option>
+            </select>
           </label>
           <label style="flex: 1;">
             並び順
