@@ -367,6 +367,7 @@ def _do_generate(req: GenerateRequest) -> dict:
     base_neg = get_negative_prompt(model_type=model, allow_comic=allow_comic)
     negative = build_heroine_negative_prompt(heroine, base_neg)
 
+    dna = config.HEROINES.get(heroine, {})
     backend = _resolve_generation_backend(req, dna, model)
     checkpoint = backend["checkpoint"]
     
