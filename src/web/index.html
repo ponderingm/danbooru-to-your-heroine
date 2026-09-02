@@ -92,7 +92,10 @@
             </label>
             <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
               🧑‍🎨 絵師 <span class="help-tip" data-tooltip="none: 絵師タグ除去&#10;keep: 元絵の絵師維持&#10;override: ヒロインの代表絵師&#10;または作家名を直接入力">?</span>
-              <input type="text" id="f-artist" list="artist-datalist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;">
+              <div class="combobox-wrapper">
+                <input type="text" id="f-artist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;" autocomplete="off">
+                <div id="f-artist-dropdown" class="combobox-dropdown"></div>
+              </div>
             </label>
           </div>
         </div>
@@ -127,8 +130,10 @@
         <div class="form-row">
           <label style="flex: 3;">
             検索クエリ <span class="help-tip" data-tooltip="Booruの検索タグ。履歴から選択するか直接入力してください">?</span>
-            <input type="text" id="b-search" list="search-history-datalist" placeholder="order:score rating:explicit ..." required>
-            <datalist id="search-history-datalist"></datalist>
+            <div class="combobox-wrapper">
+              <input type="text" id="b-search" placeholder="order:score rating:explicit ..." required autocomplete="off">
+              <div id="b-search-dropdown" class="combobox-dropdown"></div>
+            </div>
           </label>
           <label style="flex: 1.2;">
             プロバイダ <span class="help-tip" data-tooltip="バッチ巡回先のサイト&#10;Danbooru: 安定・高速&#10;Gelbooru: 要APIキー（設定タブで登録）&#10;AIBooru: AI専門Booru">?</span>
@@ -217,7 +222,10 @@
             </label>
             <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
               🧑‍🎨 絵師 <span class="help-tip" data-tooltip="none, keep, override, または作家名">?</span>
-              <input type="text" id="b-artist" list="artist-datalist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;">
+              <div class="combobox-wrapper">
+                <input type="text" id="b-artist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;" autocomplete="off">
+                <div id="b-artist-dropdown" class="combobox-dropdown"></div>
+              </div>
             </label>
           </div>
         </div>
@@ -678,11 +686,7 @@
   <img id="lightbox-img" src="" alt="拡大表示">
 </div>
 
-<datalist id="artist-datalist">
-  <option value="none">除去 (none)</option>
-  <option value="keep">元投稿優先 (keep)</option>
-  <option value="override">ヒロイン固定 (override)</option>
-</datalist>
+
 
 
 <script src="app.js"></script>

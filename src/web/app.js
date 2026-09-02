@@ -14,7 +14,7 @@ const RATING_TAG_ALIASES = {
 const heroineSelect = document.getElementById("f-heroine");
 const backendSelect = document.getElementById("f-backend");
 const fArtistInput = document.getElementById("f-artist");
-const artistDatalist = document.getElementById("artist-datalist");
+const fArtistDropdown = document.getElementById("f-artist-dropdown");
 const urlInput = document.getElementById("f-url");
 const form = document.getElementById("form");
 const submitBtn = document.getElementById("f-submit");
@@ -44,11 +44,12 @@ const lightboxClose = document.getElementById("lightbox-close");
 
 const batchForm = document.getElementById("batch-form");
 const batchSearchInput = document.getElementById("b-search");
+const bSearchDropdown = document.getElementById("b-search-dropdown");
 const batchProviderSelect = document.getElementById("b-provider");
-const searchHistoryDatalist = document.getElementById("search-history-datalist");
 const batchHeroineSelect = document.getElementById("b-heroine");
 const batchBackendSelect = document.getElementById("b-backend");
 const bArtistInput = document.getElementById("b-artist");
+const bArtistDropdown = document.getElementById("b-artist-dropdown");
 const batchSortSelect = document.getElementById("b-sort");
 const batchRatingSelect = document.getElementById("b-rating");
 const batchLuckyCheckbox = document.getElementById("b-lucky");
@@ -68,20 +69,169 @@ function resolveArtistInput(val) {
   return { artist_mode: "custom", custom_artist: v };
 }
 
+// ─────────────────────────────────────────────
+// 🎛️ カスタム Combobox コントローラー
+// ─────────────────────────────────────────────
+
+function setupCombobox({ inputEl, dropdownEl, getItems, onSelect, onDelete }) {
+  if (!inputEl || !dropdownEl) return;
+
+  let focusedIndex = -1;
+
+  function renderDropdown() {
+    const filterText = inputEl.value.trim().toLowerCase();
+    const groups = getItems(filterText);
+    
+    let html = "";
+    let totalItems = 0;
+    
+    groups.forEach(group => {
+      if (!group.items || group.items.length === 0) return;
+      if (group.title) {
+        html += `<div class="combobox-group-title">${escapeHtml(group.title)}</div>`;
+      }
+      group.items.forEach(item => {
+        totalItems++;
+        const val = typeof item === "string" ? item : item.value;
+        const label = typeof item === "string" ? item : (item.label || item.value);
+        const badge = item.badge ? `<span class="item-badge">${escapeHtml(item.badge)}</span>` : "";
+        const delBtn = item.canDelete ? `<button type="button" class="item-del-btn" title="履歴から削除" data-del="${escapeHtml(val)}">×</button>` : "";
+        
+        html += `
+          <div class="combobox-item" data-value="${escapeHtml(val)}">
+            <span class="item-label">${escapeHtml(label)}</span>
+            <div style="display: flex; align-items: center;">
+              ${badge}
+              ${delBtn}
+            </div>
+          </div>
+        `;
+      });
+    });
+
+    if (totalItems === 0) {
+      dropdownEl.innerHTML = `<div class="combobox-empty">該当する候補はありません</div>`;
+    } else {
+      dropdownEl.innerHTML = html;
+    }
+
+    focusedIndex = -1;
+    dropdownEl.classList.add("active");
+  }
+
+  function closeDropdown() {
+    dropdownEl.classList.remove("active");
+    focusedIndex = -1;
+  }
+
+  inputEl.addEventListener("focus", () => {
+    renderDropdown();
+  });
+
+  inputEl.addEventListener("input", () => {
+    renderDropdown();
+  });
+
+  dropdownEl.addEventListener("mousedown", (e) => {
+    const delBtn = e.target.closest(".item-del-btn");
+    if (delBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const delVal = delBtn.dataset.del;
+      if (onDelete) onDelete(delVal);
+      renderDropdown();
+      return;
+    }
+
+    const itemEl = e.target.closest(".combobox-item");
+    if (itemEl) {
+      e.preventDefault();
+      const val = itemEl.dataset.value;
+      inputEl.value = val;
+      if (onSelect) onSelect(val);
+      closeDropdown();
+    }
+  });
+
+  inputEl.addEventListener("keydown", (e) => {
+    if (!dropdownEl.classList.contains("active")) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        renderDropdown();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    const items = dropdownEl.querySelectorAll(".combobox-item");
+    if (items.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusedIndex = (focusedIndex + 1) % items.length;
+      updateFocusedItem(items);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      focusedIndex = (focusedIndex - 1 + items.length) % items.length;
+      updateFocusedItem(items);
+    } else if (e.key === "Enter") {
+      if (focusedIndex >= 0 && focusedIndex < items.length) {
+        e.preventDefault();
+        const val = items[focusedIndex].dataset.value;
+        inputEl.value = val;
+        if (onSelect) onSelect(val);
+        closeDropdown();
+      }
+    } else if (e.key === "Escape") {
+      closeDropdown();
+    }
+  });
+
+  function updateFocusedItem(items) {
+    items.forEach((it, idx) => {
+      if (idx === focusedIndex) {
+        it.classList.add("focused");
+        it.scrollIntoView({ block: "nearest" });
+      } else {
+        it.classList.remove("focused");
+      }
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!inputEl.contains(e.target) && !dropdownEl.contains(e.target)) {
+      closeDropdown();
+    }
+  });
+}
+
 function saveSearchHistory(query) {
   const q = (query || "").trim();
   if (!q) return;
   let history = JSON.parse(localStorage.getItem("d2h_search_history") || "[]");
   history = [q, ...history.filter(item => item !== q)].slice(0, 20);
   localStorage.setItem("d2h_search_history", JSON.stringify(history));
-  renderSearchHistoryDatalist();
 }
 
-function renderSearchHistoryDatalist() {
-  if (!searchHistoryDatalist) return;
-  const history = JSON.parse(localStorage.getItem("d2h_search_history") || "[]");
-  searchHistoryDatalist.innerHTML = history.map(item => `<option value="${escapeHtml(item)}"></option>`).join("");
+function deleteSearchHistory(val) {
+  let history = JSON.parse(localStorage.getItem("d2h_search_history") || "[]");
+  history = history.filter(item => item !== val);
+  localStorage.setItem("d2h_search_history", JSON.stringify(history));
 }
+
+function getSearchComboboxItems(filter) {
+  const history = JSON.parse(localStorage.getItem("d2h_search_history") || "[]");
+  const filtered = history
+    .filter(q => !filter || q.toLowerCase().includes(filter))
+    .map(q => ({ value: q, label: `🔍 ${q}`, canDelete: true }));
+
+  return filtered.length > 0 ? [{ title: "過去の検索クエリ", items: filtered }] : [];
+}
+
+const ARTIST_PRESETS = [
+  { value: "none", label: "🏷️ none", badge: "完全除去" },
+  { value: "keep", label: "🎨 keep", badge: "元絵維持" },
+  { value: "override", label: "🦸 override", badge: "代表絵師" },
+];
 
 function saveArtistHistory(artist) {
   const a = (artist || "").trim();
@@ -89,26 +239,51 @@ function saveArtistHistory(artist) {
   let history = JSON.parse(localStorage.getItem("d2h_artist_history") || "[]");
   history = [a, ...history.filter(item => item !== a)].slice(0, 20);
   localStorage.setItem("d2h_artist_history", JSON.stringify(history));
-  renderArtistDatalist();
 }
 
-function renderArtistDatalist() {
-  if (!artistDatalist) return;
+function deleteArtistHistory(val) {
+  let history = JSON.parse(localStorage.getItem("d2h_artist_history") || "[]");
+  history = history.filter(item => item !== val);
+  localStorage.setItem("d2h_artist_history", JSON.stringify(history));
+}
+
+function getArtistComboboxItems(filter) {
   const history = JSON.parse(localStorage.getItem("d2h_artist_history") || "[]");
-  let html = `
-    <option value="none">除去 (none)</option>
-    <option value="keep">元投稿優先 (keep)</option>
-    <option value="override">ヒロイン固定 (override)</option>
-  `;
-  if (history.length > 0) {
-    html += history.map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)} (履歴)</option>`).join("");
+  const filteredPresets = ARTIST_PRESETS.filter(p => !filter || p.value.includes(filter) || p.badge.includes(filter));
+  const filteredHistory = history
+    .filter(a => !filter || a.toLowerCase().includes(filter))
+    .map(a => ({ value: a, label: `🧑‍🎨 ${a}`, badge: "履歴", canDelete: true }));
+
+  const groups = [];
+  if (filteredPresets.length > 0) {
+    groups.push({ title: "プリセット", items: filteredPresets });
   }
-  artistDatalist.innerHTML = html;
+  if (filteredHistory.length > 0) {
+    groups.push({ title: "入力履歴", items: filteredHistory });
+  }
+  return groups;
 }
 
-[fArtistInput, bArtistInput, batchSearchInput].forEach(el => {
-  if (!el) return;
-  el.addEventListener("focus", () => el.select());
+// Combobox の初期化バインド
+setupCombobox({
+  inputEl: fArtistInput,
+  dropdownEl: fArtistDropdown,
+  getItems: getArtistComboboxItems,
+  onDelete: deleteArtistHistory,
+});
+
+setupCombobox({
+  inputEl: bArtistInput,
+  dropdownEl: bArtistDropdown,
+  getItems: getArtistComboboxItems,
+  onDelete: deleteArtistHistory,
+});
+
+setupCombobox({
+  inputEl: batchSearchInput,
+  dropdownEl: bSearchDropdown,
+  getItems: getSearchComboboxItems,
+  onDelete: deleteSearchHistory,
 });
 
 
