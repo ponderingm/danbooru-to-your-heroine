@@ -375,14 +375,13 @@ async function loadBackends() {
   const data = await res.json();
   const options = data.backends
     .map(({ id, label, online }) => {
-      const indicator = online ? "🟢" : "🔴";
-      const suffix = online ? "" : " (offline)";
-      return `<option value="${id}" ${!online ? 'class="backend-offline"' : ""}>${indicator} ${escapeHtml(label)}${suffix}</option>`;
+      const indicator = online === true ? "🟢 " : (online === false ? "🔴 " : "");
+      const suffix = online === false ? " (offline)" : "";
+      return `<option value="${id}" ${online === false ? 'class="backend-offline"' : ""}>${indicator}${escapeHtml(label)}${suffix}</option>`;
     })
     .join("");
   backendSelect.innerHTML = options;
   batchBackendSelect.innerHTML = options;
-  // オンラインのバックエンドが推奨デフォルトとして返ってきたらそれを選択する
   if (data.default) {
     backendSelect.value = data.default;
     batchBackendSelect.value = data.default;
@@ -1637,16 +1636,22 @@ document.addEventListener("click", (e) => {
   const targetTab = ["generate", "gallery", "settings"].includes(hash) ? hash : (savedTab || "generate");
   switchTab(targetTab);
 
-  await loadHeroines();
-  await loadHeroinesDetails();
-  await loadBackends();
-  await loadPurgeTags();
-  await loadBackups();
-  await loadNotificationConfig();
-  await loadSiteAuthConfig();
-  await loadComfyStatus();
-  setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
-  await resetGallery();
+  // ギャラリーと主要UIの初期化を最優先で並列実行し、描画ブロックを防ぐ
+  await Promise.all([
+    resetGallery(),
+    loadHeroines(),
+    loadHeroinesDetails(),
+    loadBackends(),
+  ]);
+
+  // 設定系やステータスポーリングはバックグラウンドで非同期読み込み
+  loadPurgeTags();
+  loadBackups();
+  loadNotificationConfig();
+  loadSiteAuthConfig();
+  loadComfyStatus().then(() => {
+    setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
+  });
   startBatchPolling();
 })();
 

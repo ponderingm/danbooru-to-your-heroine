@@ -953,32 +953,36 @@ def batch_status():
 
 
 @app.get("/backends")
-def get_backends():
+def get_backends(health: bool = False):
     """config.GENERATION_BACKENDSの一覧（Web UIのプルダウン用）。
-    各バックエンドのComfyUI生存確認(health)も同時に返し、UIがオフラインバックエンドをスキップできるようにする。
+    health=true の場合のみ各バックエンドのComfyUI生存確認を行う（初期表示用の高速レスポンスと分離）。
     """
     backends = getattr(config, "GENERATION_BACKENDS", {})
     default_id = getattr(config, "DEFAULT_BACKEND", None)
 
-    result = []
-    for bid, b in backends.items():
-        url = b.get("comfy_url", COMFYUI_URL)
-        online = check_comfy_online(url)
-        result.append({
-            "id": bid,
-            "label": b.get("label", bid),
-            "online": online,
-        })
+    if health:
+        result = []
+        for bid, b in backends.items():
+            url = b.get("comfy_url", COMFYUI_URL)
+            online = check_comfy_online(url)
+            result.append({"id": bid, "label": b.get("label", bid), "online": online})
 
-    # コンフィグのデフォルトがオンラインならそのまま使う。
-    # オフラインなら、最初にオンラインのバックエンドを自動的に推奨デフォルトにする。
-    if default_id and any(b["id"] == default_id and b["online"] for b in result):
-        effective_default = default_id
+        # コンフィグのデフォルトがオンラインならそのまま使う。
+        # オフラインなら、最初にオンラインのバックエンドを自動的に推奨デフォルトにする。
+        if default_id and any(b["id"] == default_id and b["online"] for b in result):
+            effective_default = default_id
+        else:
+            first_online = next((b["id"] for b in result if b["online"]), None)
+            effective_default = first_online or default_id
+
+        return {"backends": result, "default": effective_default, "config_default": default_id}
     else:
-        first_online = next((b["id"] for b in result if b["online"]), None)
-        effective_default = first_online or default_id
-
-    return {"backends": result, "default": effective_default, "config_default": default_id}
+        # ヘルスチェックなし（高速）: online フィールドは None（未チェック）として返す
+        result = [
+            {"id": bid, "label": b.get("label", bid), "online": None}
+            for bid, b in backends.items()
+        ]
+        return {"backends": result, "default": default_id, "config_default": default_id}
 
 
 @app.get("/comfy/status")
