@@ -1,6 +1,6 @@
-# 個人環境設定（config.example.py / config.example.yamlをコピーして作成する）
-src/config.py
+# 個人環境設定（config.example.yamlをコピーして作成する）
 src/config.yaml
+
 
 # 生成物・進捗・ルール・バックアップファイル
 database/*.json
