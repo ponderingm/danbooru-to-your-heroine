@@ -754,8 +754,11 @@ const BATCH_STATUS_POLL_MS = 3000;
 let batchPollTimer = null;
 
 function renderBatchStatus(status) {
+  const resetBtn = document.getElementById("b-reset-btn");
   batchStartBtn.disabled = status.running;
   batchStopBtn.disabled = !status.running;
+  // 停止中なのにrunning=Trueのまま詰まっている場合に強制リセットボタンを表示
+  if (resetBtn) resetBtn.style.display = "none";
   if (!status.running) {
     setStatus(batchStatusEl, status.total_checked
       ? `停止中（前回: ${status.total_checked}件確認 / ${status.total_generated}件生成）`
@@ -769,7 +772,11 @@ function renderBatchStatus(status) {
   if (cfg.lucky) text += " ・ 🍀lucky";
   else if (cfg.sort) text += ` ・ 並び順:${cfg.sort}`;
   if (status.current_post_id) text += ` ・ 現在 post #${status.current_post_id}`;
-  if (status.last_error) text += ` ・ 直近エラー: ${status.last_error}`;
+  if (status.last_error) {
+    text += ` ・ 直近エラー: ${status.last_error}`;
+    // last_errorがある状態でrunning=Trueが続いていたら強制リセットボタンを表示
+    if (resetBtn) resetBtn.style.display = "";
+  }
   setStatus(batchStatusEl, text, status.last_error ? "error" : "ok");
 }
 
@@ -850,6 +857,21 @@ batchStopBtn.addEventListener("click", async () => {
     setStatus(batchStatusEl, `エラー: ${err.message}`, "error");
   }
 });
+
+const batchResetBtn = document.getElementById("b-reset-btn");
+if (batchResetBtn) {
+  batchResetBtn.addEventListener("click", async () => {
+    batchResetBtn.disabled = true;
+    try {
+      await fetch(`${API_BASE}/batch/reset`, { method: "POST" });
+      await refreshBatchStatus();
+    } catch (err) {
+      setStatus(batchStatusEl, `リセット失敗: ${err.message}`, "error");
+    } finally {
+      batchResetBtn.disabled = false;
+    }
+  });
+}
 
 const userPurgeChips = document.getElementById("user-purge-chips");
 const baseArtifactChips = document.getElementById("base-artifact-chips");

@@ -773,111 +773,127 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
     page = 0
     consecutive_failures = 0
     max_consecutive_failures = getattr(config, "MAX_CONSECUTIVE_FAILURES", 3)
-    while True:
-        with BATCH_LOCK:
-            if BATCH_STATE["stop_requested"]:
-                break
-        try:
-            if cfg.lucky:
-                page += 1
-                posts = _batch_fetch_posts(provider, lucky_tags, page=page, limit=cfg.page_size, lucky=True)
-            else:
-                page += 1
-                posts = _batch_fetch_posts(provider, api_query, page=page, limit=cfg.page_size, lucky=False)
-        except Exception as e:
-            with BATCH_LOCK:
-                BATCH_STATE["last_error"] = f"検索エラー ({provider}): {e}"
-            time.sleep(10)
-            continue
-
-        if not posts:
-            if cfg.lucky:
-                # ランダム抽出が0件だった（母集団が少ない等）。少し待ってもう一度引き直す
-                time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
-            else:
-                # 検索条件に合致する投稿を使い切った。新着投稿を待ってページ1からやり直す
-                page = 0
-                time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
-            continue
-
-        new_in_round = 0
-        for post in posts:
+    try:
+        while True:
             with BATCH_LOCK:
                 if BATCH_STATE["stop_requested"]:
                     break
-            post_id = post.get("id")
-            with BATCH_LOCK:
-                BATCH_STATE["current_post_id"] = post_id
-                BATCH_STATE["total_checked"] += 1
-
-            post_key = f"{provider}:{post_id}"
-            post_url = _batch_post_url(provider, post_id)
-            if post_key in seen_keys or str(post_id) in seen_keys or post_url in seen_keys:
-                continue
-            new_in_round += 1
-            if local_filters and not matches_local_filters(post, local_filters):
-                continue
-            if cfg.solo_girl_only and not is_solo_girl(post):
-                continue
-            if cfg.skip_realistic and is_realistic_style(post):
-                continue
-            if cfg.skip_blacklisted and is_blacklisted(post):
+            try:
+                if cfg.lucky:
+                    page += 1
+                    posts = _batch_fetch_posts(provider, lucky_tags, page=page, limit=cfg.page_size, lucky=True)
+                else:
+                    page += 1
+                    posts = _batch_fetch_posts(provider, api_query, page=page, limit=cfg.page_size, lucky=False)
+            except Exception as e:
+                with BATCH_LOCK:
+                    BATCH_STATE["last_error"] = f"検索エラー ({provider}): {e}"
+                time.sleep(10)
                 continue
 
-            req = GenerateRequest(
-                url=post_url,
-                heroine=cfg.heroine, model=cfg.model, artist_mode=cfg.artist_mode,
-                custom_artist=cfg.custom_artist,
-                override_breasts=cfg.override_breasts,
-                override_skin=cfg.override_skin,
-                override_costume=cfg.override_costume,
-                override_art_style=cfg.override_art_style,
-                use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
-                width=cfg.width, height=cfg.height, timeout=cfg.timeout,
-                is_batch=True,
-            )
-            job_id = _enqueue_generate_job(req, BATCH_PRIORITY)
+            if not posts:
+                if cfg.lucky:
+                    # ランダム抽出が0件だった（母集団が少ない等）。少し待ってもう一度引き直す
+                    time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
+                else:
+                    # 検索条件に合致する投稿を使い切った。新着投稿を待ってページ1からやり直す
+                    page = 0
+                    time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
+                continue
 
-            # このジョブが完了するまで待ってから次の投稿へ（手動生成は優先度でこのジョブより先に処理される）
-            while True:
-                time.sleep(0.5)
-                with JOBS_LOCK:
-                    status = JOBS[job_id]["status"]
-                    error = JOBS[job_id].get("error")
-                if status in ("done", "error"):
+            new_in_round = 0
+            for post in posts:
+                with BATCH_LOCK:
+                    if BATCH_STATE["stop_requested"]:
+                        break
+                post_id = post.get("id")
+                with BATCH_LOCK:
+                    BATCH_STATE["current_post_id"] = post_id
+                    BATCH_STATE["total_checked"] += 1
+
+                post_key = f"{provider}:{post_id}"
+                post_url = _batch_post_url(provider, post_id)
+                if post_key in seen_keys or str(post_id) in seen_keys or post_url in seen_keys:
+                    continue
+                new_in_round += 1
+                if local_filters and not matches_local_filters(post, local_filters):
+                    continue
+                if cfg.solo_girl_only and not is_solo_girl(post):
+                    continue
+                if cfg.skip_realistic and is_realistic_style(post):
+                    continue
+                if cfg.skip_blacklisted and is_blacklisted(post):
+                    continue
+
+                req = GenerateRequest(
+                    url=post_url,
+                    heroine=cfg.heroine, model=cfg.model, artist_mode=cfg.artist_mode,
+                    custom_artist=cfg.custom_artist,
+                    override_breasts=cfg.override_breasts,
+                    override_skin=cfg.override_skin,
+                    override_costume=cfg.override_costume,
+                    override_art_style=cfg.override_art_style,
+                    use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
+                    width=cfg.width, height=cfg.height, timeout=cfg.timeout,
+                    is_batch=True,
+                )
+                job_id = _enqueue_generate_job(req, BATCH_PRIORITY)
+
+                # このジョブが完了するまで待ってから次の投稿へ（手動生成は優先度でこのジョブより先に処理される）
+                # NOTE: _prune_jobs_locked() で job_id が削除される場合があるため KeyError を明示的に補足する
+                while True:
+                    time.sleep(0.5)
+                    with JOBS_LOCK:
+                        job = JOBS.get(job_id)
+                    if job is None:
+                        # ジョブがパージ済み → done扱いで継続
+                        status = "done"
+                        error = None
+                        break
+                    status = job["status"]
+                    error = job.get("error")
+                    if status in ("done", "error"):
+                        break
+
+                seen_keys.add(post_key)
+                seen_keys.add(str(post_id))
+                seen_keys.add(post_url)
+
+                with BATCH_LOCK:
+                    if status == "done":
+                        BATCH_STATE["total_generated"] += 1
+                        consecutive_failures = 0
+                    else:
+                        BATCH_STATE["last_error"] = error
+                        consecutive_failures += 1
+
+                if consecutive_failures >= max_consecutive_failures:
+                    notify_failure(
+                        "自動バッチ生成を停止",
+                        f"{consecutive_failures}回連続で生成に失敗したため停止した"
+                        f"（ComfyUIがダウンしている可能性）。最後のエラー: {error}",
+                    )
+                    with BATCH_LOCK:
+                        BATCH_STATE["stop_requested"] = True
                     break
 
-            seen_keys.add(post_key)
-            seen_keys.add(str(post_id))
-            seen_keys.add(post_url)
+                time.sleep(cfg.interval_sec)
 
-            with BATCH_LOCK:
-                if status == "done":
-                    BATCH_STATE["total_generated"] += 1
-                    consecutive_failures = 0
-                else:
-                    BATCH_STATE["last_error"] = error
-                    consecutive_failures += 1
+            if cfg.lucky and new_in_round == 0:
+                # 今回のラウンドは全件生成済みだった（母集団が少ない等）。少し待ってから引き直す
+                time.sleep(cfg.interval_sec)
 
-            if consecutive_failures >= max_consecutive_failures:
-                notify_failure(
-                    "自動バッチ生成を停止",
-                    f"{consecutive_failures}回連続で生成に失敗したため停止した"
-                    f"（ComfyUIがダウンしている可能性）。最後のエラー: {error}",
-                )
-                with BATCH_LOCK:
-                    BATCH_STATE["stop_requested"] = True
-                break
-
-            time.sleep(cfg.interval_sec)
-
-        if cfg.lucky and new_in_round == 0:
-            # 今回のラウンドは全件生成済みだった（母集団が少ない等）。少し待ってから引き直す
-            time.sleep(cfg.interval_sec)
-
-    with BATCH_LOCK:
-        BATCH_STATE["running"] = False
-        BATCH_STATE["current_post_id"] = None
+    except Exception as e:
+        # 未補足例外でスレッドが死んでもrunningを確実にFalseに戻し、再起動できるようにする
+        print(f"[BATCH] ワーカースレッドが予期しない例外で終了: {e}")
+        notify_failure("バッチワーカー異常終了", str(e))
+        with BATCH_LOCK:
+            BATCH_STATE["last_error"] = f"ワーカー異常終了: {e}"
+    finally:
+        with BATCH_LOCK:
+            BATCH_STATE["running"] = False
+            BATCH_STATE["current_post_id"] = None
+            BATCH_STATE["stop_requested"] = False
 
 
 @app.post("/batch/start")
@@ -917,6 +933,18 @@ def batch_stop():
             raise HTTPException(status_code=409, detail="batch is not running")
         BATCH_STATE["stop_requested"] = True
     return _batch_status_snapshot()
+
+
+@app.post("/batch/reset")
+def batch_reset():
+    """ワーカースレッドが死んでrunning=Trueのまま詰まった場合の強制リセット。
+    ワーカーが実際に生きている場合は停止リクエストも同時に送る。"""
+    with BATCH_LOCK:
+        BATCH_STATE["running"] = False
+        BATCH_STATE["stop_requested"] = True
+        BATCH_STATE["current_post_id"] = None
+        BATCH_STATE["last_error"] = "(手動リセット)"
+    return {"ok": True, "message": "バッチ状態を強制リセットしたわ。再起動できるようになったわよ。"}
 
 
 @app.get("/batch/status")
