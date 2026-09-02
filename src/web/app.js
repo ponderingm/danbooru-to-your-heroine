@@ -65,6 +65,7 @@ const tabBtns = document.querySelectorAll(".tab-btn");
 const tabPanes = document.querySelectorAll(".tab-pane");
 
 function switchTab(tabName) {
+  const currentScrollY = window.scrollY;
   tabBtns.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
@@ -72,8 +73,11 @@ function switchTab(tabName) {
     pane.classList.toggle("active", pane.id === `tab-${tabName}`);
   });
   localStorage.setItem("d2h_active_tab", tabName);
-  location.hash = tabName;
+  // スクロールジャンプを防ぎつつURLハッシュのみ静かに更新
+  history.replaceState(null, "", `#${tabName}`);
+  window.scrollTo(0, currentScrollY);
 }
+
 
 tabBtns.forEach(btn => {
   btn.addEventListener("click", () => {
@@ -535,20 +539,99 @@ batchStopBtn.addEventListener("click", async () => {
   }
 });
 
+const userPurgeChips = document.getElementById("user-purge-chips");
+const baseArtifactChips = document.getElementById("base-artifact-chips");
+const baseMetaChips = document.getElementById("base-meta-chips");
+const baseArtifactCount = document.getElementById("base-artifact-count");
+const baseMetaCount = document.getElementById("base-meta-count");
+
+let currentUserPurgeTags = [];
+let currentUserUnpurgeTags = new Set();
+let currentBaseArtifactTags = [];
+let currentBaseMetaTags = [];
+
+function renderPurgeChips() {
+  if (userPurgeChips) {
+    userPurgeChips.innerHTML = "";
+    if (currentUserPurgeTags.length === 0) {
+      userPurgeChips.innerHTML = '<span class="empty">登録中のUserパージタグはありません</span>';
+    } else {
+      currentUserPurgeTags.forEach(tag => {
+        const chip = document.createElement("span");
+        chip.className = "tag-chip user-chip";
+        chip.textContent = `${tag} ✕`;
+        chip.title = "クリックで削除";
+        chip.addEventListener("click", () => {
+          currentUserPurgeTags = currentUserPurgeTags.filter(t => t !== tag);
+          renderPurgeChips();
+        });
+        userPurgeChips.appendChild(chip);
+      });
+    }
+  }
+
+  if (baseArtifactChips) {
+    baseArtifactChips.innerHTML = "";
+    currentBaseArtifactTags.forEach(tag => {
+      const chip = document.createElement("span");
+      const isUnpurged = currentUserUnpurgeTags.has(tag);
+      chip.className = `tag-chip base-chip ${isUnpurged ? "unpurged" : ""}`;
+      chip.textContent = isUnpurged ? `${tag} (解除中)` : tag;
+      chip.title = isUnpurged ? "クリックで除外を再有効化" : "クリックでBase層から除外解除（残す）";
+      chip.addEventListener("click", () => {
+        if (currentUserUnpurgeTags.has(tag)) {
+          currentUserUnpurgeTags.delete(tag);
+        } else {
+          currentUserUnpurgeTags.add(tag);
+        }
+        renderPurgeChips();
+      });
+      baseArtifactChips.appendChild(chip);
+    });
+  }
+
+  if (baseMetaChips) {
+    baseMetaChips.innerHTML = "";
+    currentBaseMetaTags.forEach(tag => {
+      const chip = document.createElement("span");
+      const isUnpurged = currentUserUnpurgeTags.has(tag);
+      chip.className = `tag-chip base-chip ${isUnpurged ? "unpurged" : ""}`;
+      chip.textContent = isUnpurged ? `${tag} (解除中)` : tag;
+      chip.title = isUnpurged ? "クリックで除外を再有効化" : "クリックでBase層から除外解除（残す）";
+      chip.addEventListener("click", () => {
+        if (currentUserUnpurgeTags.has(tag)) {
+          currentUserUnpurgeTags.delete(tag);
+        } else {
+          currentUserUnpurgeTags.add(tag);
+        }
+        renderPurgeChips();
+      });
+      baseMetaChips.appendChild(chip);
+    });
+  }
+
+  if (baseArtifactCount) baseArtifactCount.textContent = currentBaseArtifactTags.length;
+  if (baseMetaCount) baseMetaCount.textContent = currentBaseMetaTags.length;
+
+  if (purgeInfoEl) {
+    const baseTotal = currentBaseArtifactTags.length + currentBaseMetaTags.length;
+    const userTotal = currentUserPurgeTags.length;
+    const unpurgeTotal = currentUserUnpurgeTags.size;
+    const effectiveTotal = baseTotal + userTotal - unpurgeTotal;
+    purgeInfoEl.textContent = `📊 Base層: ${baseTotal}タグ | User層: ${userTotal}タグ | 除外解除(残す): ${unpurgeTotal}タグ | 実効除外数: ${effectiveTotal}タグ`;
+  }
+}
+
 async function loadPurgeTags() {
   try {
     const res = await fetch(`${API_BASE}/purge_tags`);
     if (!res.ok) return;
     const data = await res.json();
-    if (userPurgeInput) {
-      userPurgeInput.value = (data.user_purge_tags || []).join(", ");
-    }
-    if (purgeInfoEl) {
-      const baseTotal = (data.base_meta_tags?.length || 0) + (data.base_artifact_tags?.length || 0);
-      const userTotal = data.user_purge_tags?.length || 0;
-      const effTotal = data.effective_purge_tags?.length || 0;
-      purgeInfoEl.textContent = `📊 Base層(公式): ${baseTotal}タグ | User層(独自): ${userTotal}タグ | 有効パージ合計: ${effTotal}タグ`;
-    }
+    currentUserPurgeTags = data.user_purge_tags || [];
+    currentUserUnpurgeTags = new Set(data.user_unpurge_tags || []);
+    currentBaseArtifactTags = data.base_artifact_tags || [];
+    currentBaseMetaTags = data.base_meta_tags || [];
+    renderPurgeChips();
   } catch (err) {
     console.error("Failed to load purge tags:", err);
   }
@@ -557,17 +640,32 @@ async function loadPurgeTags() {
 if (purgeSaveBtn) {
   purgeSaveBtn.addEventListener("click", async () => {
     purgeSaveBtn.disabled = true;
-    const rawVal = userPurgeInput.value || "";
-    const tags = rawVal.split(",").map(t => t.trim()).filter(Boolean);
+    
+    // textarea に入力されたタグをパース（改行またはカンマ区切り）
+    const rawVal = (userPurgeInput && userPurgeInput.value) || "";
+    const newTags = rawVal
+      .split(/[\n,]+/)
+      .map(t => t.trim().toLowerCase())
+      .filter(Boolean);
+
+    // 既存のリストに統合
+    const merged = Array.from(new Set([...currentUserPurgeTags, ...newTags]));
+    currentUserPurgeTags = merged;
+
     try {
       const res = await fetch(`${API_BASE}/purge_tags`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ purge_tags: tags }),
+        body: JSON.stringify({
+          purge_tags: currentUserPurgeTags,
+          unpurge_tags: Array.from(currentUserUnpurgeTags),
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (userPurgeInput) userPurgeInput.value = ""; // 入力欄をクリア
       await loadPurgeTags();
-      setStatus(purgeInfoEl, "✅ パージタグを保存し、即座に反映しました！", "success");
+      await loadBackups();
+      setStatus(purgeInfoEl, "✅ パージ設定を保存し、即座に反映しました！", "success");
     } catch (err) {
       setStatus(purgeInfoEl, `❌ 保存失敗: ${err.message}`, "error");
     } finally {
@@ -575,6 +673,7 @@ if (purgeSaveBtn) {
     }
   });
 }
+
 
 if (purgeReloadBtn) {
   purgeReloadBtn.addEventListener("click", async () => {

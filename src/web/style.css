@@ -73,6 +73,81 @@ header h1 {
   transition: all 0.15s ease;
 }
 
+.lightbox-close:hover {
+  color: var(--accent);
+}
+
+/* パージ設定パネル拡張スタイル */
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chips-container-label {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin: 8px 0 4px;
+}
+
+.purge-details {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.purge-details summary {
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text);
+  user-select: none;
+}
+
+.purge-details .tag-chips {
+  margin-top: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tag-chip.base-chip {
+  background: #252836;
+  border: 1px solid #3b3f54;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.tag-chip.base-chip:hover {
+  border-color: #a855f7;
+  color: #fff;
+}
+
+.tag-chip.base-chip.unpurged {
+  text-decoration: line-through;
+  opacity: 0.45;
+  background: #1a1b23;
+  border-style: dashed;
+}
+
+.tag-chip.user-chip {
+  background: #3b204f;
+  border: 1px solid #7928ca;
+  color: #f3e8ff;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.tag-chip.user-chip:hover {
+  background: #581c87;
+  color: #fff;
+}
+
 .tab-btn:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.05);

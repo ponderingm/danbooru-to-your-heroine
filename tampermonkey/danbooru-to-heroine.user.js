@@ -393,8 +393,9 @@
     document.body.appendChild(panel);
     panel.querySelector("h3").addEventListener("click", () => panel.classList.toggle("hidden"));
     panel.querySelector(".d2h-queue-gallery").addEventListener("click", () => {
-      window.open(`${getApiBase()}/`, "_blank", "noopener");
+      window.open(`${getApiBase()}/#gallery`, "_blank", "noopener");
     });
+
     panel.querySelector(".d2h-queue-clear").addEventListener("click", () => {
       setQueue([]);
       renderQueuePanel(panel);

@@ -693,6 +693,7 @@ def comfy_status():
 
 class PurgeTagsRequest(BaseModel):
     purge_tags: list[str]
+    unpurge_tags: Optional[list[str]] = None
 
 
 @app.get("/purge_tags")
@@ -701,9 +702,11 @@ def get_purge_tags():
     base_meta = getattr(config, "BASE_RULES", {}).get("meta_purge", [])
     base_artifact = getattr(config, "BASE_RULES", {}).get("artifact_purge", [])
     user_purge = getattr(config, "USER_CONFIG", {}).get("purge_tags", [])
+    user_unpurge = getattr(config, "USER_CONFIG", {}).get("unpurge_tags", [])
     return {
         "effective_purge_tags": sorted(list(getattr(config, "EXTRA_PURGE_TAGS", []))),
         "user_purge_tags": sorted(user_purge),
+        "user_unpurge_tags": sorted(user_unpurge),
         "base_meta_tags": sorted(base_meta),
         "base_artifact_tags": sorted(base_artifact),
     }
@@ -712,12 +715,14 @@ def get_purge_tags():
 @app.post("/purge_tags")
 def update_purge_tags(req: PurgeTagsRequest):
     """WebUIからUser層のパージタグを更新し、即座にconfig.yamlへ保存＆ホットリロード"""
-    config.save_user_purge_tags(req.purge_tags)
+    config.save_user_purge_tags(req.purge_tags, req.unpurge_tags)
     return {
         "status": "ok",
         "user_purge_tags": sorted(getattr(config, "USER_CONFIG", {}).get("purge_tags", [])),
+        "user_unpurge_tags": sorted(getattr(config, "USER_CONFIG", {}).get("unpurge_tags", [])),
         "total_effective": len(getattr(config, "EXTRA_PURGE_TAGS", [])),
     }
+
 
 
 class RestorePurgeTagsRequest(BaseModel):
