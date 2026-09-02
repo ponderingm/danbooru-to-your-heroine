@@ -1013,6 +1013,7 @@ const hmCostume = document.getElementById("hm-costume");
 const hmRuleBreasts = document.getElementById("hm-rule-breasts");
 const hmRuleSkin = document.getElementById("hm-rule-skin");
 const hmRuleCostume = document.getElementById("hm-rule-costume");
+const hmRuleArtist = document.getElementById("hm-rule-artist");
 const hmSeries = document.getElementById("hm-series");
 const hmArtist = document.getElementById("hm-artist");
 const hmNegative = document.getElementById("hm-negative");
@@ -1123,6 +1124,7 @@ function populateHeroineForm(key) {
   if (hmRuleBreasts) hmRuleBreasts.value = rules.breasts || "strict";
   if (hmRuleSkin) hmRuleSkin.value = rules.skin || "strict";
   if (hmRuleCostume) hmRuleCostume.value = rules.costume || "source";
+  if (hmRuleArtist) hmRuleArtist.value = rules.artist || "none";
 
   hmSeries.value = (h.series_tags || []).join(", ");
   hmArtist.value = (h.artist_tags || []).join(", ");
@@ -1148,6 +1150,7 @@ function resetHeroineFormNew() {
   if (hmRuleBreasts) hmRuleBreasts.value = "strict";
   if (hmRuleSkin) hmRuleSkin.value = "strict";
   if (hmRuleCostume) hmRuleCostume.value = "source";
+  if (hmRuleArtist) hmRuleArtist.value = "none";
   hmSeries.value = "";
   hmArtist.value = "";
   hmNegative.value = "";
@@ -1293,6 +1296,7 @@ if (helperApplyAllBtn) {
     if (hmRuleBreasts) hmRuleBreasts.value = r.breasts || "strict";
     if (hmRuleSkin) hmRuleSkin.value = r.skin || "strict";
     if (hmRuleCostume) hmRuleCostume.value = r.costume || "source";
+    if (hmRuleArtist) hmRuleArtist.value = r.artist || "none";
 
     hmSeries.value = (d.suggested_series_tags || []).map(t => t.replace(/\(/g, "\\(").replace(/\)/g, "\\)")).join(", ");
 
@@ -1329,6 +1333,7 @@ if (heroineForm) {
           breasts: hmRuleBreasts ? hmRuleBreasts.value : "strict",
           skin: hmRuleSkin ? hmRuleSkin.value : "strict",
           costume: hmRuleCostume ? hmRuleCostume.value : "source",
+          artist: hmRuleArtist ? hmRuleArtist.value : "none",
         },
         series_tags: splitTags(hmSeries.value),
         artist_tags: splitTags(hmArtist.value),

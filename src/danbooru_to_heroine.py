@@ -213,9 +213,16 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     """
     if heroine is None:
         heroine = config.DEFAULT_HEROINE
-    if artist_mode is None:
-        artist_mode = "keep" if include_artist else "none"
     dna = get_heroine_dna(heroine)
+
+    effective_rules = dict(dna.get("override_rules", {}))
+    if override_rules:
+        for k, v in override_rules.items():
+            if v and v != "default":
+                effective_rules[k] = v
+
+    if artist_mode is None or artist_mode == "default":
+        artist_mode = effective_rules.get("artist", "keep" if include_artist else "none")
     blacklist = build_blacklist_set()
     purge_set = build_purge_set()
     known_character_tags = build_known_character_tags()
@@ -302,12 +309,6 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
         rating_tag = RATING_TAG_MAP.get(rating_code)
     if rating_tag:
         situation_tags.append(rating_tag)
-
-    effective_rules = dict(dna.get("override_rules", {}))
-    if override_rules:
-        for k, v in override_rules.items():
-            if v and v != "default":
-                effective_rules[k] = v
 
     breasts_mode = effective_rules.get("breasts", "strict")
     skin_mode = effective_rules.get("skin", "strict")

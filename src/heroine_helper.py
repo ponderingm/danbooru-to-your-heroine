@@ -145,6 +145,7 @@ def search_and_analyze_heroine(
     suggested_override_rules = {
         "skin": "strict",
         "costume": "source",
+        "artist": "none",
     }
     if is_small_chest:
         suggested_override_rules["breasts"] = "strict"  # 小胸は絶対に変化させないヒロイン固定
