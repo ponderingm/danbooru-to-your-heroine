@@ -68,9 +68,18 @@ def extract_post_id(url: str) -> Union[int, str]:
 
 def fetch_post(post_id_or_url: Union[int, str], login: str = None, api_key: str = None) -> UnifiedPost:
     """URLまたはPost IDから統一投稿オブジェクト（UnifiedPost）を取得する"""
-    login = login or getattr(config, "DANBOORU_LOGIN", None)
-    api_key = api_key or getattr(config, "DANBOORU_API_KEY", None)
-    return fetch_unified_post(str(post_id_or_url), login=login, api_key=api_key)
+    url_str = str(post_id_or_url)
+    if "gelbooru" in url_str.lower():
+        user_id = getattr(config, "GELBOORU_USER_ID", None)
+        g_key = getattr(config, "GELBOORU_API_KEY", None)
+        return fetch_unified_post(url_str, user_id=user_id, api_key=g_key)
+    elif "civitai" in url_str.lower():
+        c_key = getattr(config, "CIVITAI_API_KEY", None)
+        return fetch_unified_post(url_str, api_key=c_key)
+    else:
+        login = login or getattr(config, "DANBOORU_LOGIN", None)
+        api_key = api_key or getattr(config, "DANBOORU_API_KEY", None)
+        return fetch_unified_post(url_str, login=login, api_key=api_key)
 
 
 
