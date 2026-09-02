@@ -161,7 +161,23 @@ def build_known_character_tags() -> set:
 
 
 def get_heroine_dna(heroine: str) -> dict:
-    return config.HEROINES.get(heroine, config.HEROINES[config.DEFAULT_HEROINE])
+    if heroine and heroine in config.HEROINES:
+        return config.HEROINES[heroine]
+    if config.DEFAULT_HEROINE and config.DEFAULT_HEROINE in config.HEROINES:
+        return config.HEROINES[config.DEFAULT_HEROINE]
+    if config.HEROINES:
+        return next(iter(config.HEROINES.values()))
+    return {
+        "name": heroine or "Unknown",
+        "identity_tags": [],
+        "face_tags": [],
+        "body_tags": [],
+        "costume_tags": [],
+        "override_rules": {},
+        "negative_tags": [],
+        "series_tags": [],
+        "artist_tags": [],
+    }
 
 
 def build_heroine_negative_prompt(heroine: str, base_negative: str) -> str:
@@ -419,7 +435,10 @@ def mutate_raw_prompt_to_heroine(raw_prompt: str, heroine: str = None, extra_ign
             cleaned_situation.append(core.replace("_", " "))
             seen.add(norm)
 
-    identity_tags = dna["identity_tags"] + dna["body_tags"]
+    face_tags = dna.get("face_tags", [])
+    body_tags = dna.get("body_tags", [])
+    costume_tags = dna.get("costume_tags", [])
+    identity_tags = list(dna.get("identity_tags", [])) + face_tags + body_tags + costume_tags
     return build_prompt(identity_tags, cleaned_situation)
 
 

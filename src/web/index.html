@@ -217,8 +217,8 @@
                 <p class="hint" style="margin-top: 0;">Danbooru / Gelbooru でキャラクター名を検索し、採用率上位のタグを解析して顔・身体DNA・衣装・対立ネガティブを自動サジェストします。</p>
                 <div class="form-row">
                   <label style="flex: 2;">
-                    キャラクタータグ名 (例: mizuki_yukikaze, asuka_langley_soryu)
-                    <input type="text" id="helper-char-name" placeholder="mizuki_yukikaze">
+                    キャラクタータグ名 <span class="help-tip" data-tooltip="Booru上のキャラクタータグ (例: character_name)">?</span>
+                    <input type="text" id="helper-char-name" placeholder="character_name">
                   </label>
                   <label style="flex: 1;">
                     検索モード
@@ -280,7 +280,7 @@
                   <span style="font-size: 1.4rem;">👸</span>
                   <div>
                     <h3 id="hm-editor-title">ヒロイン編集</h3>
-                    <span id="hm-editor-sub" style="font-size: 0.78rem; color: var(--text-dim); font-family: monospace;">yukikaze</span>
+                    <span id="hm-editor-sub" style="font-size: 0.78rem; color: var(--text-dim); font-family: monospace;">-</span>
                   </div>
                 </div>
                 <div style="display: flex; gap: 8px;">
@@ -291,16 +291,16 @@
 
               <div class="form-row" style="margin-top: 12px;">
                 <label style="flex: 1;">
-                  ヒロインID <span class="help-tip" data-tooltip="英数キー。内部管理やファイル名に使用されます (例: yukikaze)">?</span>
-                  <input type="text" id="hm-key" required placeholder="yukikaze">
+                  ヒロインID <span class="help-tip" data-tooltip="英数小文字キー。内部管理やファイル名に使用されます (例: heroine_id)">?</span>
+                  <input type="text" id="hm-key" required placeholder="heroine_id">
                 </label>
                 <label style="flex: 1.5;">
-                  表示名 <span class="help-tip" data-tooltip="画面上に表示される日本語名 (例: 水城ゆきかぜ)">?</span>
-                  <input type="text" id="hm-name" required placeholder="水城ゆきかぜ">
+                  表示名 <span class="help-tip" data-tooltip="画面上に表示されるキャラクターの名称">?</span>
+                  <input type="text" id="hm-name" required placeholder="表示名">
                 </label>
                 <label style="flex: 1.5;">
                   デフォルトCheckpoint <span class="help-tip" data-tooltip="このヒロイン選択時に優先するモデル (未設定時は標準モデル)">?</span>
-                  <input type="text" id="hm-checkpoint" placeholder="waiIllustriousSDXL_v160.safetensors">
+                  <input type="text" id="hm-checkpoint" placeholder="model_name.safetensors">
                 </label>
               </div>
 
@@ -313,7 +313,7 @@
                 <div class="form-row">
                   <label style="flex: 1;">
                     🍒 胸サイズ
-                    <span class="help-tip" data-tooltip="Strict: 元絵の胸を完全消去して固定 (ユキカゼ等)&#10;Flexible: 元絵の豊満サイズ (large~gigantic) を活かす (不知火等)&#10;Source: 元絵の胸サイズをそのまま継承">?</span>
+                    <span class="help-tip" data-tooltip="Strict: 元絵の胸サイズを完全消去し、指定サイズに固定&#10;Flexible: 元絵の豊満サイズ (large~gigantic) を活かす&#10;Source: 元絵の胸サイズをそのまま継承">?</span>
                     <select id="hm-rule-breasts">
                       <option value="strict">🔒 絶対遵守 (Strict)</option>
                       <option value="flexible">🌊 柔軟適応 (Flexible)</option>
@@ -322,7 +322,7 @@
                   </label>
                   <label style="flex: 1;">
                     ☀️ 肌色
-                    <span class="help-tip" data-tooltip="Strict: 褐色肌や色白肌を強制固定&#10;Source: 元絵の肌色を尊重">?</span>
+                    <span class="help-tip" data-tooltip="Strict: 褐色肌や色白肌など指定肌色を強制固定&#10;Source: 元絵の肌色を尊重">?</span>
                     <select id="hm-rule-skin">
                       <option value="strict">🔒 絶対遵守 (Strict)</option>
                       <option value="source">🎨 元絵維持 (Source)</option>
@@ -342,40 +342,40 @@
 
               <label>
                 アイデンティティ <span class="help-tip" data-tooltip="置換後に必ず先頭へ入る核となるキャラ名・作品タグ (カンマ区切り)">?</span>
-                <textarea id="hm-identity" rows="2" placeholder="mizuki yukikaze, taimanin \(series\)"></textarea>
+                <textarea id="hm-identity" rows="2" placeholder="character name, series \(series\)"></textarea>
               </label>
 
               <!-- 3大カテゴリ分類: 顔・体型・衣装 -->
               <div class="form-row" style="gap: 12px;">
                 <label style="flex: 1;">
                   👤 顔・頭部 <span class="help-tip" data-tooltip="髪型・髪色・瞳の色など。元絵の髪や瞳をヒロインの顔DNAで置換します">?</span>
-                  <textarea id="hm-face" rows="3" placeholder="very long hair, twintails, brown hair, pink eyes"></textarea>
+                  <textarea id="hm-face" rows="3" placeholder="hair length, hair style, hair color, eye color"></textarea>
                 </label>
                 <label style="flex: 1;">
                   👙 体型・身体 <span class="help-tip" data-tooltip="肌色・胸サイズ・くびれなど。ヒロインのプロポーションを定義します">?</span>
-                  <textarea id="hm-body" rows="3" placeholder="dark skin, one-piece tan, small breasts, slender, slim waist"></textarea>
+                  <textarea id="hm-body" rows="3" placeholder="skin tone, breast size, body type"></textarea>
                 </label>
               </div>
 
               <label>
                 👗 代表衣装 <span class="help-tip" data-tooltip="公式スーツや代表衣装。衣装ポリシーが有効な際に適用されます">?</span>
-                <textarea id="hm-costume" rows="2" placeholder="taimanin suit, leotard, gloves, thighhighs"></textarea>
+                <textarea id="hm-costume" rows="2" placeholder="outfit, clothing, accessories"></textarea>
               </label>
 
               <div class="form-row">
                 <label style="flex: 1;">
-                  作品名 <span class="help-tip" data-tooltip="除外パージせず残したいシリーズタグ (例: taimanin \(series\))">?</span>
-                  <input type="text" id="hm-series" placeholder="taimanin \(series\)">
+                  作品名 <span class="help-tip" data-tooltip="除外パージせず残したいシリーズタグ (例: series \(series\))">?</span>
+                  <input type="text" id="hm-series" placeholder="series \(series\)">
                 </label>
                 <label style="flex: 1;">
-                  代表絵師 <span class="help-tip" data-tooltip="ヒロイン固定時に使用する絵師タグ (例: artist:aoi nagisa)">?</span>
-                  <input type="text" id="hm-artist" placeholder="artist:aoi nagisa">
+                  代表絵師 <span class="help-tip" data-tooltip="ヒロイン固定時に使用する絵師タグ (例: artist:creator_name)">?</span>
+                  <input type="text" id="hm-artist" placeholder="artist:creator_name">
                 </label>
               </div>
 
               <label>
                 固有ネガティブ <span class="help-tip" data-tooltip="このヒロイン生成時にネガティブプロンプトへ追加する除外タグ">?</span>
-                <textarea id="hm-negative" rows="2" placeholder="fair skin, large breasts"></textarea>
+                <textarea id="hm-negative" rows="2" placeholder="tags to exclude for this heroine"></textarea>
               </label>
 
               <p id="hm-status" class="status"></p>

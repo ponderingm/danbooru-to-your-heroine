@@ -99,7 +99,7 @@ def reload_config() -> None:
 
     # 4. ヒロイン定義
     HEROINES = USER_CONFIG.get("heroines", {})
-    DEFAULT_HEROINE = USER_CONFIG.get("default_heroine", next(iter(HEROINES)) if HEROINES else "yukikaze")
+    DEFAULT_HEROINE = USER_CONFIG.get("default_heroine", next(iter(HEROINES)) if HEROINES else "")
     SERIES_TAG_KEEP_KEYWORDS = USER_CONFIG.get("series_tag_keep_keywords", [])
     OTHER_KNOWN_CHARACTER_TAGS = set(USER_CONFIG.get("other_known_character_tags", []))
 
