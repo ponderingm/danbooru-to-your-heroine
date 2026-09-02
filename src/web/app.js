@@ -374,10 +374,15 @@ async function loadBackends() {
   const res = await fetch(`${API_BASE}/backends`);
   const data = await res.json();
   const options = data.backends
-    .map(({ id, label }) => `<option value="${id}">${escapeHtml(label)}</option>`)
+    .map(({ id, label, online }) => {
+      const indicator = online ? "🟢" : "🔴";
+      const suffix = online ? "" : " (offline)";
+      return `<option value="${id}" ${!online ? 'class="backend-offline"' : ""}>${indicator} ${escapeHtml(label)}${suffix}</option>`;
+    })
     .join("");
   backendSelect.innerHTML = options;
   batchBackendSelect.innerHTML = options;
+  // オンラインのバックエンドが推奨デフォルトとして返ってきたらそれを選択する
   if (data.default) {
     backendSelect.value = data.default;
     batchBackendSelect.value = data.default;
@@ -393,8 +398,27 @@ async function loadComfyStatus() {
     const res = await fetch(`${API_BASE}/comfy/status`);
     const data = await res.json();
     comfyStatusEl.innerHTML = Object.entries(data)
-      .map(([bid, st]) => `<span class="comfy-dot ${st}">\u25cf ${escapeHtml(backendLabels[bid] || bid)}</span>`)
+      .map(([bid, st]) => `<span class="comfy-dot ${st}">● ${escapeHtml(backendLabels[bid] || bid)}</span>`)
       .join("");
+    // セレクタのオンライン/オフライン表示を更新する（ラベルは変えずにdot指標だけ更新）
+    [backendSelect, batchBackendSelect].forEach(sel => {
+      if (!sel) return;
+      [...sel.options].forEach(opt => {
+        const bid = opt.value;
+        const st = data[bid];
+        if (!st) return;
+        const label = backendLabels[bid] || bid;
+        const indicator = (st === "online") ? "🟢" : "🔴";
+        const suffix = (st === "online") ? "" : " (offline)";
+        opt.textContent = `${indicator} ${label}${suffix}`;
+        opt.className = (st === "online") ? "" : "backend-offline";
+        // もし現在選択中がオフラインになったなら、最初のオンラインに切り替える
+        if (opt.selected && st === "offline") {
+          const firstOnline = [...sel.options].find(o => o.className !== "backend-offline");
+          if (firstOnline) sel.value = firstOnline.value;
+        }
+      });
+    });
   } catch (err) {
     comfyStatusEl.innerHTML = `<span class="comfy-dot offline">ComfyUIステータス取得失敗</span>`;
   }
@@ -1616,8 +1640,6 @@ document.addEventListener("click", (e) => {
   await loadHeroines();
   await loadHeroinesDetails();
   await loadBackends();
-  renderArtistDatalist();
-  renderSearchHistoryDatalist();
   await loadPurgeTags();
   await loadBackups();
   await loadNotificationConfig();
