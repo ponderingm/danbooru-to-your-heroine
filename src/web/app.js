@@ -1360,6 +1360,8 @@ if (hmDeleteBtn) {
       hmDeleteBtn.disabled = false;
     }
   });
+}
+
 // ヘルプアイコンのクリックトグル（モバイル・タッチ対応）
 document.addEventListener("click", (e) => {
   const tip = e.target.closest(".help-tip");
