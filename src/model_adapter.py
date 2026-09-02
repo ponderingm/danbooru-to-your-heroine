@@ -70,10 +70,21 @@ def adapt_prompt(raw_prompt, model_type="illustrious"):
             p = f"masterpiece, best quality, amazing quality, very aesthetic, absurdres, {p}"
         return _dedupe_tags(p)
 
-def get_negative_prompt(model_type="illustrious"):
+def get_negative_prompt(model_type="illustrious", allow_comic: bool = False):
     m = model_type.lower()
     if "anima" in m:
-        return "worst quality, low quality, score_1, score_2, score_3, 6 fingers, 6 toes, ai-generated, bad eyes, bad pupils, bad iris, bad hands, bad fingers, watermark, patreon logo, text, speech bubble, sound effects, logo, signature, scenery, distant character, small person, tiny figure, landscape focus, empty scene, wide panoramic view, background emphasis"
+        neg = "worst quality, low quality, score_1, score_2, score_3, 6 fingers, 6 toes, ai-generated, bad eyes, bad pupils, bad iris, bad hands, bad fingers, watermark, patreon logo, text, speech bubble, sound effects, logo, signature, scenery, distant character, small person, tiny figure, landscape focus, empty scene, wide panoramic view, background emphasis"
     else:
-        # 🎨 Illustrious-XL: Complete text, watermark, comic, speech bubble banishment
-        return "worst quality, low quality, bad anatomy, bad hands, bad eyes, text, letters, font, logo, watermark, signature, username, artist name, copyright name, web address, patreon logo, twitter username, speech bubble, dialogue, commentary, sound effects, subtitles, comic, manga, page, panel, border, frame, ui, split screen, censored, blurry"
+        # 🎨 Illustrious-XL
+        comic_tags = {"comic", "manga", "page", "panel", "border", "frame"}
+        base_tags = [
+            "worst quality", "low quality", "bad anatomy", "bad hands", "bad eyes", "text", "letters",
+            "font", "logo", "watermark", "signature", "username", "artist name", "copyright name",
+            "web address", "patreon logo", "twitter username", "speech bubble", "dialogue", "commentary",
+            "sound effects", "subtitles", "comic", "manga", "page", "panel", "border", "frame", "ui",
+            "split screen", "censored", "blurry"
+        ]
+        if allow_comic:
+            base_tags = [t for t in base_tags if t not in comic_tags]
+        neg = ", ".join(base_tags)
+    return neg

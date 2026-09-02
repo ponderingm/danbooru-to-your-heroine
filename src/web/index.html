@@ -50,8 +50,8 @@
             <span>🎛️ オプション</span>
             <span class="help-tip" data-tooltip="今回の生成時のみ適用される換装ルールです。未指定時はヒロインの基本設定に従います">?</span>
           </div>
-          <div class="form-row" style="gap: 12px;">
-            <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+          <div class="form-row" style="gap: 12px; flex-wrap: wrap;">
+            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
               🍒 胸サイズ
               <select id="f-override-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
@@ -59,7 +59,7 @@
                 <option value="source">🎨 元絵維持 (Source)</option>
               </select>
             </label>
-            <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
               ☀️ 肌色
               <select id="f-override-skin" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
@@ -67,7 +67,7 @@
                 <option value="source">🎨 元絵維持 (Source)</option>
               </select>
             </label>
-            <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
               👗 衣装
               <select id="f-override-costume" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
@@ -76,10 +76,18 @@
                 <option value="mix">✨ ハイブリッド</option>
               </select>
             </label>
-            <label style="flex: 1.6; margin: 0; font-size: 0.78rem;">
-              🎨 画風・絵師
-              <span class="help-tip" data-tooltip="none: 絵師タグ除去&#10;keep: 元絵の絵師維持&#10;override: ヒロインの代表絵師&#10;または直接作家名を入力">?</span>
-              <input type="text" id="f-artist" list="artist-datalist" placeholder="none, keep, override, または作家名" style="padding: 4px 8px; font-size: 0.82rem;">
+            <label style="flex: 1.1; min-width: 135px; margin: 0; font-size: 0.78rem;">
+              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: comic/monochrome等の元絵画風を保持&#10;カラー化: モノクロ/漫画タグを除去して通常アニメ調&#10;モノクロ漫画: 強制的にcomic/monochrome調">?</span>
+              <select id="f-override-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
+                <option value="default">設定通り (デフォルト)</option>
+                <option value="source">🎨 元絵維持 (Source)</option>
+                <option value="color">🌈 カラー化 (Color)</option>
+                <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
+              </select>
+            </label>
+            <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
+              🧑‍🎨 絵師 <span class="help-tip" data-tooltip="none: 絵師タグ除去&#10;keep: 元絵の絵師維持&#10;override: ヒロインの代表絵師&#10;または作家名を直接入力">?</span>
+              <input type="text" id="f-artist" list="artist-datalist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;">
             </label>
           </div>
         </div>
@@ -152,8 +160,8 @@
             <span>🎛️ バッチオプション</span>
             <span class="help-tip" data-tooltip="バッチ生成中の全画像に対して適用される換装ルールです。未指定時はヒロインの基本設定に従います">?</span>
           </div>
-          <div class="form-row" style="gap: 12px;">
-            <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+          <div class="form-row" style="gap: 12px; flex-wrap: wrap;">
+            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
               🍒 胸サイズ
               <select id="b-override-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
@@ -161,7 +169,7 @@
                 <option value="source">🎨 元絵維持 (Source)</option>
               </select>
             </label>
-            <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
               ☀️ 肌色
               <select id="b-override-skin" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
@@ -169,7 +177,7 @@
                 <option value="source">🎨 元絵維持 (Source)</option>
               </select>
             </label>
-            <label style="flex: 1; margin: 0; font-size: 0.78rem;">
+            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
               👗 衣装
               <select id="b-override-costume" style="padding: 4px 8px; font-size: 0.82rem;">
                 <option value="default">設定通り (デフォルト)</option>
@@ -178,10 +186,18 @@
                 <option value="mix">✨ ハイブリッド</option>
               </select>
             </label>
-            <label style="flex: 1.6; margin: 0; font-size: 0.78rem;">
-              🎨 画風・絵師
-              <span class="help-tip" data-tooltip="none, keep, override, または作家名">?</span>
-              <input type="text" id="b-artist" list="artist-datalist" placeholder="none, keep, override, または作家名" style="padding: 4px 8px; font-size: 0.82rem;">
+            <label style="flex: 1.1; min-width: 135px; margin: 0; font-size: 0.78rem;">
+              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: comic/monochrome等の元絵画風を保持&#10;カラー化: モノクロ/漫画タグを除去して通常アニメ調&#10;モノクロ漫画: 強制的にcomic/monochrome調">?</span>
+              <select id="b-override-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
+                <option value="default">設定通り (デフォルト)</option>
+                <option value="source">🎨 元絵維持 (Source)</option>
+                <option value="color">🌈 カラー化 (Color)</option>
+                <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
+              </select>
+            </label>
+            <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
+              🧑‍🎨 絵師 <span class="help-tip" data-tooltip="none, keep, override, または作家名">?</span>
+              <input type="text" id="b-artist" list="artist-datalist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;">
             </label>
           </div>
         </div>
@@ -420,7 +436,16 @@
                     </select>
                   </label>
                   <label style="flex: 1;">
-                    🎨 画風・絵師
+                    🖌️ 画風ポリシー
+                    <span class="help-tip" data-tooltip="Source: 元絵のcomic/monochrome等の画風を尊重&#10;Color: モノクロ/漫画タグを除去して通常アニメ調&#10;Monochrome: 常にcomic/monochrome調">?</span>
+                    <select id="hm-rule-art-style">
+                      <option value="source">🎨 元絵維持 (Source)</option>
+                      <option value="color">🌈 カラー化 (Color)</option>
+                      <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
+                    </select>
+                  </label>
+                  <label style="flex: 1;">
+                    🧑‍🎨 絵師ポリシー
                     <span class="help-tip" data-tooltip="None: 絵師タグを完全除去&#10;Override: 常にヒロインの代表絵師を使用&#10;Keep: 元絵の絵師タグを優先維持">?</span>
                     <select id="hm-rule-artist">
                       <option value="none">🚫 絵師除去 (None)</option>

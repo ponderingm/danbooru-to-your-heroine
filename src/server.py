@@ -117,6 +117,7 @@ class ConvertRequest(BaseModel):
     override_breasts: Optional[str] = None
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
+    override_art_style: Optional[str] = None
 
 
 
@@ -180,6 +181,8 @@ def _convert(req: ConvertRequest):
         adhoc_rules["skin"] = req.override_skin
     if getattr(req, "override_costume", None) and req.override_costume != "default":
         adhoc_rules["costume"] = req.override_costume
+    if getattr(req, "override_art_style", None) and req.override_art_style != "default":
+        adhoc_rules["art_style"] = req.override_art_style
 
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
         post, heroine=heroine, include_artist=req.include_artist, artist_mode=req.artist_mode,
@@ -359,9 +362,10 @@ def _do_generate(req: GenerateRequest) -> dict:
     if req.prompt_override and req.prompt_override.strip():
         prompt = req.prompt_override.strip()
 
-    dna = config.HEROINES[heroine]
-
-    negative = build_heroine_negative_prompt(heroine, get_negative_prompt(model_type=model))
+    prompt_lower = prompt.lower()
+    allow_comic = any(t in prompt_lower for t in ["comic", "monochrome", "greyscale", "grayscale", "manga"])
+    base_neg = get_negative_prompt(model_type=model, allow_comic=allow_comic)
+    negative = build_heroine_negative_prompt(heroine, base_neg)
 
     backend = _resolve_generation_backend(req, dna, model)
     checkpoint = backend["checkpoint"]
@@ -693,6 +697,7 @@ class BatchConfig(BaseModel):
     override_breasts: Optional[str] = None
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
+    override_art_style: Optional[str] = None
 
 
 BATCH_LOCK = threading.Lock()
@@ -794,6 +799,7 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 override_breasts=cfg.override_breasts,
                 override_skin=cfg.override_skin,
                 override_costume=cfg.override_costume,
+                override_art_style=cfg.override_art_style,
                 use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                 width=cfg.width, height=cfg.height, timeout=cfg.timeout,
             )

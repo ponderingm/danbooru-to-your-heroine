@@ -313,14 +313,27 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     breasts_mode = effective_rules.get("breasts", "strict")
     skin_mode = effective_rules.get("skin", "strict")
     costume_mode = effective_rules.get("costume", "source")
+    art_style_mode = effective_rules.get("art_style", "source")
 
     detected_source_breasts = set()
     detected_source_skin = set()
+    detected_source_style = set()
     skin_tags_set = {"dark skin", "light skin", "pale skin", "fair skin", "white skin", "tan", "tanned", "sun tan", "one-piece tan"}
+    art_style_mono_set = {"monochrome", "greyscale", "grayscale", "comic", "manga", "screentone", "sketch", "lineart", "line art"}
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:
         tag_norm = tag.replace("_", " ").lower()
+
+        # 画風判定（オーバーライドルール: source = 元絵維持, color = カラー化, monochrome = モノクロ漫画）
+        if tag_norm in art_style_mono_set:
+            if art_style_mode == "color":
+                removed_tags.append(tag_norm)
+                continue
+            else:  # source または monochrome
+                situation_tags.append(tag.replace("_", " "))
+                detected_source_style.add(tag_norm)
+                continue
 
         # 胸サイズ判定（オーバーライドルール: strict = ヒロイン固定, source = 元絵維持）
         if tag_norm in BREAST_TAGS:
@@ -381,6 +394,10 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     active_costumes = []
     if costume_mode in ("heroine", "mix"):
         active_costumes = costume_tags
+
+    # 画風モノクロ強制注入
+    if art_style_mode == "monochrome" and not detected_source_style:
+        situation_tags.extend(["monochrome", "greyscale", "comic"])
 
     identity_tags = dna.get("identity_tags", []) + face_tags + body_tags + active_costumes
     return identity_tags, situation_tags, removed_tags

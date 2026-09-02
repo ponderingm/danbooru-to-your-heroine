@@ -24,6 +24,7 @@ const previewBtn = document.getElementById("f-preview-btn");
 const fOverrideBreasts = document.getElementById("f-override-breasts");
 const fOverrideSkin = document.getElementById("f-override-skin");
 const fOverrideCostume = document.getElementById("f-override-costume");
+const fOverrideArtStyle = document.getElementById("f-override-art-style");
 const comfyStatusEl = document.getElementById("comfy-status");
 const gallery = document.getElementById("gallery");
 const galleryCount = document.getElementById("gallery-count");
@@ -55,6 +56,7 @@ const batchStopBtn = document.getElementById("b-stop-btn");
 const bOverrideBreasts = document.getElementById("b-override-breasts");
 const bOverrideSkin = document.getElementById("b-override-skin");
 const bOverrideCostume = document.getElementById("b-override-costume");
+const bOverrideArtStyle = document.getElementById("b-override-art-style");
 const batchStatusEl = document.getElementById("batch-status");
 
 function resolveArtistInput(val) {
@@ -349,6 +351,7 @@ previewBtn.addEventListener("click", async () => {
         override_breasts: fOverrideBreasts ? fOverrideBreasts.value : undefined,
         override_skin: fOverrideSkin ? fOverrideSkin.value : undefined,
         override_costume: fOverrideCostume ? fOverrideCostume.value : undefined,
+        override_art_style: fOverrideArtStyle ? fOverrideArtStyle.value : undefined,
       }),
     });
     if (!res.ok) {
@@ -402,6 +405,7 @@ form.addEventListener("submit", async (e) => {
     override_breasts: fOverrideBreasts ? fOverrideBreasts.value : undefined,
     override_skin: fOverrideSkin ? fOverrideSkin.value : undefined,
     override_costume: fOverrideCostume ? fOverrideCostume.value : undefined,
+    override_art_style: fOverrideArtStyle ? fOverrideArtStyle.value : undefined,
     prompt_override: promptTextarea.value.trim() || undefined,
   };
   try {
@@ -631,6 +635,7 @@ batchForm.addEventListener("submit", async (e) => {
     override_breasts: bOverrideBreasts ? bOverrideBreasts.value : undefined,
     override_skin: bOverrideSkin ? bOverrideSkin.value : undefined,
     override_costume: bOverrideCostume ? bOverrideCostume.value : undefined,
+    override_art_style: bOverrideArtStyle ? bOverrideArtStyle.value : undefined,
     sort: batchSortSelect.value || null,
     lucky: batchLuckyCheckbox.checked,
   };
@@ -1013,6 +1018,7 @@ const hmCostume = document.getElementById("hm-costume");
 const hmRuleBreasts = document.getElementById("hm-rule-breasts");
 const hmRuleSkin = document.getElementById("hm-rule-skin");
 const hmRuleCostume = document.getElementById("hm-rule-costume");
+const hmRuleArtStyle = document.getElementById("hm-rule-art-style");
 const hmRuleArtist = document.getElementById("hm-rule-artist");
 const hmSeries = document.getElementById("hm-series");
 const hmArtist = document.getElementById("hm-artist");
@@ -1124,6 +1130,7 @@ function populateHeroineForm(key) {
   if (hmRuleBreasts) hmRuleBreasts.value = rules.breasts || "strict";
   if (hmRuleSkin) hmRuleSkin.value = rules.skin || "strict";
   if (hmRuleCostume) hmRuleCostume.value = rules.costume || "source";
+  if (hmRuleArtStyle) hmRuleArtStyle.value = rules.art_style || "source";
   if (hmRuleArtist) hmRuleArtist.value = rules.artist || "none";
 
   hmSeries.value = (h.series_tags || []).join(", ");
@@ -1150,6 +1157,7 @@ function resetHeroineFormNew() {
   if (hmRuleBreasts) hmRuleBreasts.value = "strict";
   if (hmRuleSkin) hmRuleSkin.value = "strict";
   if (hmRuleCostume) hmRuleCostume.value = "source";
+  if (hmRuleArtStyle) hmRuleArtStyle.value = "source";
   if (hmRuleArtist) hmRuleArtist.value = "none";
   hmSeries.value = "";
   hmArtist.value = "";
@@ -1296,6 +1304,7 @@ if (helperApplyAllBtn) {
     if (hmRuleBreasts) hmRuleBreasts.value = r.breasts || "strict";
     if (hmRuleSkin) hmRuleSkin.value = r.skin || "strict";
     if (hmRuleCostume) hmRuleCostume.value = r.costume || "source";
+    if (hmRuleArtStyle) hmRuleArtStyle.value = r.art_style || "source";
     if (hmRuleArtist) hmRuleArtist.value = r.artist || "none";
 
     hmSeries.value = (d.suggested_series_tags || []).map(t => t.replace(/\(/g, "\\(").replace(/\)/g, "\\)")).join(", ");
@@ -1333,6 +1342,7 @@ if (heroineForm) {
           breasts: hmRuleBreasts ? hmRuleBreasts.value : "strict",
           skin: hmRuleSkin ? hmRuleSkin.value : "strict",
           costume: hmRuleCostume ? hmRuleCostume.value : "source",
+          art_style: hmRuleArtStyle ? hmRuleArtStyle.value : "source",
           artist: hmRuleArtist ? hmRuleArtist.value : "none",
         },
         series_tags: splitTags(hmSeries.value),
