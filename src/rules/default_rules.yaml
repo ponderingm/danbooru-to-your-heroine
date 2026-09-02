@@ -53,6 +53,14 @@ artifact_purge:
   - bar censor
   - character censor
   - censored text
+  - censored
+  - steam censor
+  - smoke censor
+  - light censor
+  - heart censor
+  - novelty censor
+  - shadow censor
+  - sparkle censor
   - artist name
   - copyright name
   - cover
@@ -105,6 +113,8 @@ identity_attributes:
     - dark-skinned male
     - tan
     - tanlines
+    - sun tan
+    - one-piece tan
   breasts:
     - flat chest
     - small breasts

@@ -46,6 +46,7 @@ def reload_config() -> None:
     global OTHER_KNOWN_CHARACTER_TAGS, EXTRA_PURGE_TAGS, GENERATION_BLACKLIST_TAGS
     global QUALITY_TAGS, CHARACTER_IDENTITY_BLACKLIST, BASE_RULES, USER_CONFIG
     global ART_STYLE_TAGS, ART_STYLE_PRESETS
+    global META_TAG_BLACKLIST, CENSORING_BLACKLIST, BREAST_TAGS, SKIN_TAGS
 
     # 1. ユーザー設定ロード（config.yaml が無ければ config.example.yaml をフォールバック）
     user_path = CONFIG_YAML_PATH if CONFIG_YAML_PATH.exists() else CONFIG_EXAMPLE_YAML_PATH
@@ -117,6 +118,10 @@ def reload_config() -> None:
 
     QUALITY_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("quality_tags", [])}
     CHARACTER_IDENTITY_BLACKLIST = BASE_RULES.get("identity_attributes", {})
+    META_TAG_BLACKLIST = {t.replace("_", " ").lower() for t in BASE_RULES.get("meta_purge", [])}
+    CENSORING_BLACKLIST = {t.replace("_", " ").lower() for t in BASE_RULES.get("artifact_purge", [])}
+    BREAST_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("breasts", [])}
+    SKIN_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("skin", [])}
 
     # 6. 画風・媒体カタログ（default_rules.yaml + config.yaml）
     base_styles = set()

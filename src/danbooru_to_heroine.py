@@ -24,83 +24,14 @@ import config
 from site_adapters import resolve_adapter, fetch_unified_post, UnifiedPost
 
 # ─────────────────────────────────────────────
-# 除去すべき「元キャラ固有タグ」パターン（属性カテゴリはヒロインに依らず共通）
+# 共通ルール・タグ分類（すべて rules/default_rules.yaml および config.py 由来）
 # ─────────────────────────────────────────────
-CHARACTER_IDENTITY_BLACKLIST = {
-    "skin": [
-        "light skin", "fair skin", "pale skin", "white skin",
-        "tan skin", "brown skin", "dark skin",
-        "dark-skinned female", "dark-skinned male",
-    ],
-    "breasts": [
-        "flat chest", "small breasts", "medium breasts", "large breasts",
-        "huge breasts", "gigantic breasts", "enormous breasts",
-        "big breasts", "massive breasts", "petite",
-    ],
-    "hair_color": [
-        "blonde hair", "brown hair", "red hair", "orange hair",
-        "purple hair", "green hair", "blue hair", "white hair",
-        "silver hair", "pink hair", "grey hair", "gray hair",
-        "black hair", "light brown hair", "dark brown hair",
-        "multicolored hair", "streaked hair", "gradient hair",
-    ],
-    "hair_style": [
-        "long hair", "short hair", "medium hair", "very long hair",
-        "ponytail", "twintails", "twin tails", "braid", "braids",
-        "side ponytail", "double bun", "bun", "hair bun",
-        "bob cut", "pixie cut", "drill hair", "curly hair",
-        "wavy hair", "straight hair", "ahoge",
-        "low twintails", "high ponytail",
-    ],
-    "eye_color": [
-        "blue eyes", "green eyes", "red eyes", "purple eyes",
-        "brown eyes", "golden eyes", "yellow eyes", "silver eyes",
-        "grey eyes", "gray eyes", "black eyes", "heterochromia",
-        "pink eyes", "aqua eyes", "teal eyes",
-    ],
-    "eye_shape": [
-        "tsurime", "tareme",
-    ],
-}
-
-# 画にならない不要メタタグ（投稿管理用タグなど）
-META_TAG_BLACKLIST = {
-    "bad pixiv id", "bad id", "bad twitter id", "bad deviantart id",
-    "bad nicoseiga id", "bad tumblr id", "bad source id",
-    "translated", "translation request", "partial translation",
-    "commentary", "commentary request", "commentary typo", "check commentary", "partial commentary",
-    "personification", "character request", "artist request","photoshop (medium)"
-    "duplicate", "revision", "resized", "non-web source", "third-party edit","third-party source","english commentary", 
-}
-
-QUALITY_TAGS = {
-    "masterpiece", "best quality", "high quality", "ultra quality",
-    "highly detailed", "detailed", "absurdres", "highres", "4k", "8k", "hdr",
-}
-
-BREAST_TAGS = {
-    "flat chest", "small breasts", "medium breasts", "large breasts",
-    "huge breasts", "gigantic breasts", "enormous breasts", "big breasts", "massive breasts", "petite",
-}
-LARGE_BREAST_FAMILY = {
-    "large breasts", "huge breasts", "gigantic breasts", "enormous breasts", "big breasts", "massive breasts",
-}
-SMALL_BREAST_FAMILY = {
-    "flat chest", "small breasts", "petite",
-}
-
-
-# モザイク等の検閲タグ（画像には映らない/生成時に不要なので除去）
-CENSORING_BLACKLIST = {
-    "censored", "mosaic censoring", "bar censor",
-    "character censor", "steam censor", "smoke censor", "light censor",
-    "heart censor", "novelty censor", "shadow censor",
-    "sparkle censor",
-    "artist name","copyright name","cover", "cover name","content rating","signature",
-    "watermark","cover page","doujin cover",
-    "speech bubble", "thought bubble", "sound effect","colored speech bubble",
-    "character age",
-}
+CHARACTER_IDENTITY_BLACKLIST = getattr(config, "CHARACTER_IDENTITY_BLACKLIST", {})
+META_TAG_BLACKLIST = getattr(config, "META_TAG_BLACKLIST", set())
+QUALITY_TAGS = getattr(config, "QUALITY_TAGS", set())
+BREAST_TAGS = getattr(config, "BREAST_TAGS", set())
+SKIN_TAGS = getattr(config, "SKIN_TAGS", set())
+CENSORING_BLACKLIST = getattr(config, "CENSORING_BLACKLIST", set())
 
 # Danbooruのratingフィールド(g/s/q/e) → Illustrious系モデルが学習済みのratingタグ
 RATING_TAG_MAP = {
@@ -329,7 +260,7 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     detected_source_breasts = set()
     detected_source_skin = set()
     detected_source_style = set()
-    skin_tags_set = {"dark skin", "light skin", "pale skin", "fair skin", "white skin", "tan", "tanned", "sun tan", "one-piece tan"}
+    skin_tags_set = SKIN_TAGS
     art_style_set = build_art_style_set()
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
