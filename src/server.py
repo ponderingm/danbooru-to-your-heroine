@@ -251,6 +251,58 @@ def list_heroines():
     return {key: {"name": dna["name"]} for key, dna in config.HEROINES.items()}
 
 
+@app.get("/heroines/details")
+def get_heroines_details():
+    """全ヒロインの詳細定義を返す"""
+    return {"heroines": getattr(config, "HEROINES", {})}
+
+
+class AnalyzeHeroineRequest(BaseModel):
+    character_name: str
+    search_mode: Optional[str] = "auto"
+    site: Optional[str] = "danbooru"
+
+
+@app.post("/heroines/analyze")
+def analyze_heroine_tags(req: AnalyzeHeroineRequest):
+    """Booruからキャラクターのタグ頻度を分析してヒロイン設定を提案"""
+    from heroine_helper import search_and_analyze_heroine
+    try:
+        res = search_and_analyze_heroine(
+            character_name=req.character_name,
+            search_mode=req.search_mode or "auto",
+            site=req.site or "danbooru",
+        )
+        return {"status": "ok", **res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class SaveHeroineRequest(BaseModel):
+    key: str
+    data: dict
+
+
+@app.post("/heroines/save")
+def save_heroine_config(req: SaveHeroineRequest):
+    """ヒロイン設定を新規作成または更新して保存"""
+    k = req.key.strip().replace(" ", "_").lower()
+    if not k:
+        raise HTTPException(status_code=400, detail="ヒロインID（英数キー）を指定してください")
+    config.save_heroine(k, req.data)
+    return {"status": "ok", "key": k}
+
+
+@app.delete("/heroines/{key}")
+def delete_heroine_config(key: str):
+    """指定ヒロインを削除"""
+    ok = config.delete_heroine(key)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"ヒロイン '{key}' が見つかりませんでした")
+    return {"status": "ok"}
+
+
+
 @app.post("/convert")
 def convert(req: ConvertRequest):
     post, heroine, prompt, model, extras = _convert(req)

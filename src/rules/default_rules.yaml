@@ -93,9 +93,33 @@ quality_tags:
 
 # 元キャラの身体属性（ヒロイン属性と衝突するため置換対象となるタグ分類）
 identity_attributes:
+  skin:
+    - light skin
+    - fair skin
+    - pale skin
+    - white skin
+    - tan skin
+    - brown skin
+    - dark skin
+    - dark-skinned female
+    - dark-skinned male
+    - tan
+    - tanlines
+  breasts:
+    - flat chest
+    - small breasts
+    - medium breasts
+    - large breasts
+    - huge breasts
+    - gigantic breasts
+    - enormous breasts
+    - big breasts
+    - massive breasts
+    - petite
   hair_color:
     - blonde hair
     - brown hair
+
     - black hair
     - blue hair
     - red hair

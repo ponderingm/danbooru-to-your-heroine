@@ -239,8 +239,33 @@ def save_site_auth_config(civitai_api_key: str = None, danbooru_login: str = Non
     reload_config()
 
 
+def save_heroine(heroine_key: str, heroine_data: dict) -> None:
+
+    """WebUI等からヒロイン設定を保存し、即座にリロードする"""
+    _create_backup()
+    data = _load_yaml(CONFIG_YAML_PATH)
+    if "heroines" not in data:
+        data["heroines"] = {}
+    data["heroines"][heroine_key] = heroine_data
+    _save_yaml(CONFIG_YAML_PATH, data)
+    reload_config()
+
+
+def delete_heroine(heroine_key: str) -> bool:
+    """WebUI等からヒロイン設定を削除し、即座にリロードする"""
+    _create_backup()
+    data = _load_yaml(CONFIG_YAML_PATH)
+    if "heroines" in data and heroine_key in data["heroines"]:
+        del data["heroines"][heroine_key]
+        _save_yaml(CONFIG_YAML_PATH, data)
+        reload_config()
+        return True
+    return False
+
+
 # モジュール初回ロード時に実行
 reload_config()
+
 
 
 

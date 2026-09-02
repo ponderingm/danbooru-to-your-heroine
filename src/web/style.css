@@ -559,3 +559,57 @@ button.danger {
   border-color: var(--accent);
 }
 
+/* ヒロイン分析ヘルパー結果エリア */
+.helper-results {
+  background: #0d0e14;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.helper-results.hidden {
+  display: none;
+}
+
+.helper-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.helper-section-title {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: var(--accent);
+}
+
+.helper-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #181a24;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.helper-chip:hover {
+  border-color: var(--accent);
+  background: #252839;
+}
+
+.helper-chip .rate {
+  color: #79ffe1;
+  font-size: 0.72rem;
+  font-family: monospace;
+}
+
+

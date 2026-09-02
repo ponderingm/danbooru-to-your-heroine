@@ -174,7 +174,129 @@
        タブ3: 設定 (Settings)
        ───────────────────────────────────────────── -->
   <div id="tab-settings" class="tab-pane">
+    <section id="heroine-mgmt-panel" class="panel">
+      <h2>👸 ヒロイン・アイデンティティ設定 ＆ Booru分析ヘルパー</h2>
+      <p class="hint">ヒロインの身体的DNAやアイデンティティをWebUIから直接設定・追加・編集できます。Danbooru / Gelbooru からタグ出現頻度を統計分析して、設定をワンクリック自動生成する強力なヘルパーも搭載！</p>
+
+      <div class="form-row" style="align-items: flex-end;">
+        <label style="flex: 2;">
+          編集するヒロインを選択
+          <select id="heroine-mgmt-select"></select>
+        </label>
+        <button type="button" id="heroine-new-btn" class="secondary">➕ 新しいヒロインを作成</button>
+      </div>
+
+      <!-- 🔍 Booruタグ分析ヘルパー（アコーディオン） -->
+      <details class="purge-details" id="heroine-helper-details" style="margin: 14px 0;" open>
+        <summary>🤖 Booruタグ出現頻度分析ヘルパー (新ヒロイン自動設定)</summary>
+        <div style="padding: 12px 6px;">
+          <p class="hint" style="margin-top: 0;">Danbooru / Gelbooru でキャラクター名を検索し、採用率・頻度上位のタグを解析して身体DNAや衣装、対立ネガティブを自動サジェストします。</p>
+          <div class="form-row">
+            <label style="flex: 2;">
+              キャラクタータグ名 (例: mizuki_yukikaze, asuka_langley_soryu)
+              <input type="text" id="helper-char-name" placeholder="mizuki_yukikaze">
+            </label>
+            <label style="flex: 1;">
+              検索モード
+              <select id="helper-search-mode">
+                <option value="auto">自動 (公式優先→人気順)</option>
+                <option value="official">公式原画 (official_art)</option>
+                <option value="popular">人気順 (1girl solo スコア順)</option>
+                <option value="all">全投稿</option>
+              </select>
+            </label>
+            <label style="flex: 1;">
+              検索サイト
+              <select id="helper-site">
+                <option value="danbooru">Danbooru</option>
+                <option value="gelbooru">Gelbooru</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-row">
+            <button type="button" id="helper-analyze-btn" class="secondary">🔍 Booruからアイデンティティを自動分析</button>
+            <button type="button" id="helper-apply-all-btn" class="secondary hidden" style="background: #252839; border-color: #79ffe1; color: #79ffe1;">✨ 分析結果をフォームに一括反映</button>
+          </div>
+          <p id="helper-status" class="status"></p>
+
+          <div id="helper-results" class="helper-results hidden">
+            <!-- 身体DNA候補 -->
+            <div class="helper-section">
+              <span class="helper-section-title">🧬 身体・外見タグ候補 (クリックで身体タグ欄に追加):</span>
+              <div id="helper-body-chips" class="tag-chips"></div>
+            </div>
+            <!-- 作品名候補 -->
+            <div class="helper-section">
+              <span class="helper-section-title">📚 作品名タグ候補 (クリックで作品タグ欄に追加):</span>
+              <div id="helper-series-chips" class="tag-chips"></div>
+            </div>
+            <!-- 代表衣装候補 -->
+            <div class="helper-section">
+              <span class="helper-section-title">👗 代表衣装・アクセサリ候補:</span>
+              <div id="helper-costume-chips" class="tag-chips"></div>
+            </div>
+            <!-- ネガティブ候補 -->
+            <div class="helper-section">
+              <span class="helper-section-title">🚫 対立反意ネガティブ候補 (クリックでネガティブ欄に追加):</span>
+              <div id="helper-negative-chips" class="tag-chips"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ヒロイン編集フォーム -->
+      <form id="heroine-form">
+        <div class="form-row">
+          <label style="flex: 1;">
+            ヒロインID (英数キー, 例: yukikaze)
+            <input type="text" id="hm-key" required placeholder="yukikaze">
+          </label>
+          <label style="flex: 1.5;">
+            表示名 (日本語, 例: 水城ゆきかぜ)
+            <input type="text" id="hm-name" required placeholder="水城ゆきかぜ">
+          </label>
+          <label style="flex: 1.5;">
+            デフォルトCheckpoint (任意)
+            <input type="text" id="hm-checkpoint" placeholder="waiIllustriousSDXL_v160.safetensors">
+          </label>
+        </div>
+
+        <label>
+          アイデンティティタグ (キャラ名など置換後の核となるタグ。カンマまたは改行区切り)
+          <textarea id="hm-identity" rows="2" placeholder="mizuki yukikaze, taimanin \(series\)"></textarea>
+        </label>
+
+        <label>
+          身体特徴タグ (肌色、胸サイズ、髪型、髪色など。カンマまたは改行区切り)
+          <textarea id="hm-body" rows="3" placeholder="dark skin, one-piece tan, small breasts, very long hair, twintails, slender, slim waist"></textarea>
+        </label>
+
+        <div class="form-row">
+          <label style="flex: 1;">
+            作品名タグ (除外せず保持したいシリーズタグ)
+            <input type="text" id="hm-series" placeholder="taimanin \(series\)">
+          </label>
+          <label style="flex: 1;">
+            代表絵師タグ (任意、ヒロイン固定時に使用)
+            <input type="text" id="hm-artist" placeholder="artist:aoi nagisa">
+          </label>
+        </div>
+
+        <label>
+          固有ネガティブタグ (このヒロイン生成時に追加する除外タグ)
+          <textarea id="hm-negative" rows="2" placeholder="fair skin, large breasts"></textarea>
+        </label>
+
+        <div class="form-row" style="margin-top: 8px;">
+          <button type="submit" id="hm-save-btn">💾 このヒロインを保存</button>
+          <button type="button" id="hm-delete-btn" class="danger">🗑️ このヒロインを削除</button>
+        </div>
+        <p id="hm-status" class="status"></p>
+      </form>
+    </section>
+
     <section id="purge-panel" class="panel">
+
       <div class="gallery-header">
         <h2>🛡️ 除外タグ管理 (Purge Tags)</h2>
         <div class="header-actions">

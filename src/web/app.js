@@ -967,6 +967,290 @@ if (authSaveBtn) {
   });
 }
 
+const heroineMgmtSelect = document.getElementById("heroine-mgmt-select");
+const heroineNewBtn = document.getElementById("heroine-new-btn");
+const helperCharName = document.getElementById("helper-char-name");
+const helperSearchMode = document.getElementById("helper-search-mode");
+const helperSite = document.getElementById("helper-site");
+const helperAnalyzeBtn = document.getElementById("helper-analyze-btn");
+const helperApplyAllBtn = document.getElementById("helper-apply-all-btn");
+const helperStatusEl = document.getElementById("helper-status");
+const helperResultsEl = document.getElementById("helper-results");
+const helperBodyChips = document.getElementById("helper-body-chips");
+const helperSeriesChips = document.getElementById("helper-series-chips");
+const helperCostumeChips = document.getElementById("helper-costume-chips");
+const helperNegativeChips = document.getElementById("helper-negative-chips");
+
+const heroineForm = document.getElementById("heroine-form");
+const hmKey = document.getElementById("hm-key");
+const hmName = document.getElementById("hm-name");
+const hmCheckpoint = document.getElementById("hm-checkpoint");
+const hmIdentity = document.getElementById("hm-identity");
+const hmBody = document.getElementById("hm-body");
+const hmSeries = document.getElementById("hm-series");
+const hmArtist = document.getElementById("hm-artist");
+const hmNegative = document.getElementById("hm-negative");
+const hmSaveBtn = document.getElementById("hm-save-btn");
+const hmDeleteBtn = document.getElementById("hm-delete-btn");
+const hmStatusEl = document.getElementById("hm-status");
+
+let heroinesDetailsCache = {};
+let lastAnalysisResult = null;
+
+function appendTagToTextarea(textarea, tag) {
+  if (!textarea || !tag) return;
+  const current = textarea.value.trim();
+  const tags = current ? current.split(/[\n,]+/).map(t => t.trim()).filter(Boolean) : [];
+  if (!tags.includes(tag)) {
+    tags.push(tag);
+    textarea.value = tags.join(", ");
+  }
+}
+
+async function loadHeroinesDetails() {
+  if (!heroineMgmtSelect) return;
+  try {
+    const res = await fetch(`${API_BASE}/heroines/details`);
+    if (!res.ok) return;
+    const data = await res.json();
+    heroinesDetailsCache = data.heroines || {};
+    const keys = Object.keys(heroinesDetailsCache);
+    heroineMgmtSelect.innerHTML = keys
+      .map(k => `<option value="${k}">${escapeHtml(heroinesDetailsCache[k].name || k)} (${k})</option>`)
+      .join("");
+
+    if (keys.length > 0) {
+      populateHeroineForm(keys[0]);
+    }
+  } catch (err) {
+    console.error("Failed to load heroines details:", err);
+  }
+}
+
+function populateHeroineForm(key) {
+  const h = heroinesDetailsCache[key];
+  if (!h) return;
+  hmKey.value = key;
+  hmKey.readOnly = true; // 既存編集時はキー変更不可
+  hmName.value = h.name || "";
+  hmCheckpoint.value = h.default_checkpoint || "";
+  hmIdentity.value = (h.identity_tags || []).join(", ");
+  hmBody.value = (h.body_tags || []).join(", ");
+  hmSeries.value = (h.series_tags || []).join(", ");
+  hmArtist.value = (h.artist_tags || []).join(", ");
+  hmNegative.value = (h.negative_tags || []).join(", ");
+  if (hmDeleteBtn) hmDeleteBtn.style.display = "";
+}
+
+if (heroineMgmtSelect) {
+  heroineMgmtSelect.addEventListener("change", () => {
+    populateHeroineForm(heroineMgmtSelect.value);
+  });
+}
+
+if (heroineNewBtn) {
+  heroineNewBtn.addEventListener("click", () => {
+    hmKey.value = "";
+    hmKey.readOnly = false;
+    hmName.value = "";
+    hmCheckpoint.value = "";
+    hmIdentity.value = "";
+    hmBody.value = "";
+    hmSeries.value = "";
+    hmArtist.value = "";
+    hmNegative.value = "";
+    if (hmDeleteBtn) hmDeleteBtn.style.display = "none";
+    hmKey.focus();
+    setStatus(hmStatusEl, "新しいヒロインの情報を入力するか、上のBooruヘルパーで自動生成してね♪", "ok");
+  });
+}
+
+// 🔍 Booruタグ分析ヘルパー
+if (helperAnalyzeBtn) {
+  helperAnalyzeBtn.addEventListener("click", async () => {
+    const charName = helperCharName.value.trim();
+    if (!charName) {
+      setStatus(helperStatusEl, "キャラクター名を入力してください", "error");
+      return;
+    }
+    helperAnalyzeBtn.disabled = true;
+    setStatus(helperStatusEl, "Booruを検索してタグ出現頻度を統計分析中…");
+    try {
+      const res = await fetch(`${API_BASE}/heroines/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          character_name: charName,
+          search_mode: helperSearchMode.value,
+          site: helperSite.value,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      lastAnalysisResult = data;
+      renderAnalysisResults(data);
+      setStatus(helperStatusEl, `✅ ${data.total_posts_analyzed}件の投稿からアイデンティティ分析完了！`, "success");
+      if (helperApplyAllBtn) helperApplyAllBtn.classList.remove("hidden");
+    } catch (err) {
+      setStatus(helperStatusEl, `❌ 分析失敗: ${err.message}`, "error");
+    } finally {
+      helperAnalyzeBtn.disabled = false;
+    }
+  });
+}
+
+function renderAnalysisResults(data) {
+  if (!helperResultsEl) return;
+  helperResultsEl.classList.remove("hidden");
+
+  // 身体タグ
+  helperBodyChips.innerHTML = (data.body_candidates || []).map(b => `
+    <span class="helper-chip" data-tag="${escapeHtml(b.tag)}" title="${escapeHtml(b.category)}">
+      + ${escapeHtml(b.tag)} <span class="rate">${b.rate}%</span>
+    </span>
+  `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+  helperBodyChips.querySelectorAll(".helper-chip").forEach(el => {
+    el.addEventListener("click", () => {
+      appendTagToTextarea(hmBody, el.dataset.tag);
+      el.style.opacity = "0.5";
+    });
+  });
+
+  // 作品タグ
+  helperSeriesChips.innerHTML = (data.series_candidates || []).map(s => `
+    <span class="helper-chip" data-tag="${escapeHtml(s.tag)}">
+      + ${escapeHtml(s.tag)} <span class="rate">${s.rate}%</span>
+    </span>
+  `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+  helperSeriesChips.querySelectorAll(".helper-chip").forEach(el => {
+    el.addEventListener("click", () => {
+      const esc = el.dataset.tag.replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+      appendTagToTextarea(hmSeries, esc);
+      el.style.opacity = "0.5";
+    });
+  });
+
+  // 衣装タグ
+  helperCostumeChips.innerHTML = (data.costume_candidates || []).map(c => `
+    <span class="helper-chip" data-tag="${escapeHtml(c.tag)}">
+      + ${escapeHtml(c.tag)} <span class="rate">${c.rate}%</span>
+    </span>
+  `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+  helperCostumeChips.querySelectorAll(".helper-chip").forEach(el => {
+    el.addEventListener("click", () => {
+      appendTagToTextarea(hmIdentity, el.dataset.tag);
+      el.style.opacity = "0.5";
+    });
+  });
+
+  // ネガティブタグ
+  helperNegativeChips.innerHTML = (data.negative_candidates || []).map(n => `
+    <span class="helper-chip" data-tag="${escapeHtml(n.tag)}" title="${escapeHtml(n.reason)}">
+      + ${escapeHtml(n.tag)}
+    </span>
+  `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+  helperNegativeChips.querySelectorAll(".helper-chip").forEach(el => {
+    el.addEventListener("click", () => {
+      appendTagToTextarea(hmNegative, el.dataset.tag);
+      el.style.opacity = "0.5";
+    });
+  });
+}
+
+// ✨ 分析結果を一括反映
+if (helperApplyAllBtn) {
+  helperApplyAllBtn.addEventListener("click", () => {
+    if (!lastAnalysisResult) return;
+    const d = lastAnalysisResult;
+    if (!hmName.value) hmName.value = d.character_name;
+    if (!hmKey.value) hmKey.value = d.character_name.replace(/\s+/g, "_").toLowerCase();
+
+    hmIdentity.value = (d.suggested_identity_tags || []).join(", ");
+    hmBody.value = (d.suggested_body_tags || []).join(", ");
+    hmSeries.value = (d.suggested_series_tags || []).map(t => t.replace(/\(/g, "\\(").replace(/\)/g, "\\)")).join(", ");
+
+    if (d.artist_candidates && d.artist_candidates.length > 0 && !hmArtist.value) {
+      hmArtist.value = d.artist_candidates[0].tag;
+    }
+    if (d.negative_candidates && d.negative_candidates.length > 0) {
+      hmNegative.value = d.negative_candidates.map(n => n.tag).join(", ");
+    }
+    setStatus(hmStatusEl, "✨ 推奨設定を一括流し込みしたわ！確認して保存してね♪", "success");
+  });
+}
+
+// ヒロインフォーム保存
+if (heroineForm) {
+  heroineForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const key = hmKey.value.trim().replace(/\s+/g, "_").toLowerCase();
+    if (!key) {
+      setStatus(hmStatusEl, "ヒロインIDを入力してください", "error");
+      return;
+    }
+    hmSaveBtn.disabled = true;
+    try {
+      const splitTags = (val) => val.split(/[\n,]+/).map(t => t.trim()).filter(Boolean);
+
+      const heroineData = {
+        name: hmName.value.trim() || key,
+        identity_tags: splitTags(hmIdentity.value),
+        body_tags: splitTags(hmBody.value),
+        series_tags: splitTags(hmSeries.value),
+        artist_tags: splitTags(hmArtist.value),
+        negative_tags: splitTags(hmNegative.value),
+        default_checkpoint: hmCheckpoint.value.trim() || undefined,
+      };
+
+      const res = await fetch(`${API_BASE}/heroines/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, data: heroineData }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      await loadHeroines();
+      await loadHeroinesDetails();
+      heroineMgmtSelect.value = key;
+      populateHeroineForm(key);
+      await loadBackups();
+      setStatus(hmStatusEl, `✅ ヒロイン '${heroineData.name}' を保存・反映しました！`, "success");
+    } catch (err) {
+      setStatus(hmStatusEl, `❌ 保存失敗: ${err.message}`, "error");
+    } finally {
+      hmSaveBtn.disabled = false;
+    }
+  });
+}
+
+// ヒロイン削除
+if (hmDeleteBtn) {
+  hmDeleteBtn.addEventListener("click", async () => {
+    const key = hmKey.value.trim();
+    if (!key || !confirm(`本当にヒロイン '${key}' を削除する？`)) return;
+    hmDeleteBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/heroines/${key}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadHeroines();
+      await loadHeroinesDetails();
+      await loadBackups();
+      setStatus(hmStatusEl, `✅ ヒロイン '${key}' を削除しました`, "success");
+    } catch (err) {
+      setStatus(hmStatusEl, `❌ 削除失敗: ${err.message}`, "error");
+    } finally {
+      hmDeleteBtn.disabled = false;
+    }
+  });
+}
+
 (async function init() {
   // 保存されていたタブ、またはURLハッシュから復元
   const hash = location.hash.replace("#", "");
@@ -975,6 +1259,7 @@ if (authSaveBtn) {
   switchTab(targetTab);
 
   await loadHeroines();
+  await loadHeroinesDetails();
   await loadBackends();
   renderArtistDatalist();
   renderSearchHistoryDatalist();
@@ -987,6 +1272,7 @@ if (authSaveBtn) {
   await resetGallery();
   startBatchPolling();
 })();
+
 
 
 
