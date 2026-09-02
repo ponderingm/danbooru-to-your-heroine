@@ -1360,9 +1360,19 @@ if (hmDeleteBtn) {
       hmDeleteBtn.disabled = false;
     }
   });
-}
+// ヘルプアイコンのクリックトグル（モバイル・タッチ対応）
+document.addEventListener("click", (e) => {
+  const tip = e.target.closest(".help-tip");
+  document.querySelectorAll(".help-tip.active").forEach(el => {
+    if (el !== tip) el.classList.remove("active");
+  });
+  if (tip) {
+    tip.classList.toggle("active");
+  }
+});
 
 (async function init() {
+
   // 保存されていたタブ、またはURLハッシュから復元
   const hash = location.hash.replace("#", "");
   const savedTab = localStorage.getItem("d2h_active_tab");
