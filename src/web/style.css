@@ -612,4 +612,203 @@ button.danger {
   font-family: monospace;
 }
 
+/* ─────────────────────────────────────────────
+   設定画面リニューアル (Modern Settings Dashboard)
+   ───────────────────────────────────────────── */
+.settings-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* サブナビゲーション（ピル型タブ） */
+.settings-subnav {
+  display: flex;
+  gap: 8px;
+  background: #12141d;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.settings-subnav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.settings-subnav-btn:hover {
+  color: var(--text);
+  background: #1b1e2b;
+}
+
+.settings-subnav-btn.active {
+  background: var(--accent);
+  color: #111;
+  font-weight: bold;
+}
+
+.settings-subpane {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-subpane.active {
+  display: flex;
+}
+
+/* ヒロイン管理: 2ペイン（マスター／ディテール） */
+.heroine-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .heroine-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.heroine-sidebar {
+  background: #151722;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.heroine-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.heroine-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #1c1f2e;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.heroine-card:hover {
+  background: #24283b;
+  border-color: var(--border);
+}
+
+.heroine-card.active {
+  background: #282e44;
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(121, 255, 225, 0.15);
+}
+
+.heroine-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.heroine-card-name {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--text);
+}
+
+.heroine-card-key {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+
+.rule-badge {
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.rule-badge.strict {
+  background: rgba(121, 255, 225, 0.15);
+  color: #79ffe1;
+  border: 1px solid rgba(121, 255, 225, 0.3);
+}
+
+.rule-badge.flexible {
+  background: rgba(255, 121, 198, 0.15);
+  color: #ff79c6;
+  border: 1px solid rgba(255, 121, 198, 0.3);
+}
+
+.heroine-editor-panel {
+  background: #151722;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.editor-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-title h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+/* カード型設定セクション */
+.settings-card {
+  background: #12141e;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-card-title {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
 

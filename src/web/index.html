@@ -174,311 +174,361 @@
        タブ3: 設定 (Settings)
        ───────────────────────────────────────────── -->
   <div id="tab-settings" class="tab-pane">
-    <section id="heroine-mgmt-panel" class="panel">
-      <h2>👸 ヒロイン・アイデンティティ設定 ＆ Booru分析ヘルパー</h2>
-      <p class="hint">ヒロインの身体的DNAやアイデンティティをWebUIから直接設定・追加・編集できます。Danbooru / Gelbooru からタグ出現頻度を統計分析して、設定をワンクリック自動生成する強力なヘルパーも搭載！</p>
+    <div class="settings-shell">
+      
+      <!-- 📌 サブナビゲーション（ピル型タブ） -->
+      <nav class="settings-subnav">
+        <button type="button" class="settings-subnav-btn active" data-subpane="subpane-heroines">
+          👸 ヒロイン管理・DNA
+        </button>
+        <button type="button" class="settings-subnav-btn" data-subpane="subpane-purge">
+          🛡️ 除外タグ・品質ルール
+        </button>
+        <button type="button" class="settings-subnav-btn" data-subpane="subpane-auth">
+          🔑 サイト認証・APIキー
+        </button>
+        <button type="button" class="settings-subnav-btn" data-subpane="subpane-system">
+          🔔 通知・システム設定
+        </button>
+      </nav>
 
-      <div class="form-row" style="align-items: flex-end;">
-        <label style="flex: 2;">
-          編集するヒロインを選択
-          <select id="heroine-mgmt-select"></select>
-        </label>
-        <button type="button" id="heroine-new-btn" class="secondary">➕ 新しいヒロインを作成</button>
+      <!-- ══════════════════════════════════════════
+           サブペイン 1: ヒロイン管理 (Master-Detail 2ペイン)
+           ══════════════════════════════════════════ -->
+      <div id="subpane-heroines" class="settings-subpane active">
+        <div class="heroine-layout">
+          
+          <!-- 左カラム: ヒロイン一覧 -->
+          <div class="heroine-sidebar">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 0.85rem; font-weight: bold; color: var(--text-dim);">登録ヒロイン一覧</span>
+              <button type="button" id="heroine-new-btn" class="secondary" style="padding: 4px 8px; font-size: 0.78rem;">➕ 新規追加</button>
+            </div>
+            <div id="heroine-card-list" class="heroine-list"></div>
+          </div>
+
+          <!-- 右カラム: ヒロインエディタ ＆ Booru分析ヘルパー -->
+          <div class="heroine-editor-panel">
+            
+            <!-- 🔍 Booruタグ出現頻度分析ヘルパー (折りたたみカード) -->
+            <details class="purge-details" id="heroine-helper-details" style="margin: 0; background: #10121a; border-radius: 8px;">
+              <summary style="font-weight: bold; color: #79ffe1;">🤖 Booruタグ出現頻度分析ヘルパー (新ヒロイン自動設定)</summary>
+              <div style="padding: 12px 6px;">
+                <p class="hint" style="margin-top: 0;">Danbooru / Gelbooru でキャラクター名を検索し、採用率上位のタグを解析して顔・身体DNA・衣装・対立ネガティブを自動サジェストします。</p>
+                <div class="form-row">
+                  <label style="flex: 2;">
+                    キャラクタータグ名 (例: mizuki_yukikaze, asuka_langley_soryu)
+                    <input type="text" id="helper-char-name" placeholder="mizuki_yukikaze">
+                  </label>
+                  <label style="flex: 1;">
+                    検索モード
+                    <select id="helper-search-mode">
+                      <option value="auto">自動 (公式優先→人気順)</option>
+                      <option value="official">公式原画 (official_art)</option>
+                      <option value="popular">人気順 (1girl solo スコア順)</option>
+                      <option value="all">全投稿</option>
+                    </select>
+                  </label>
+                  <label style="flex: 1;">
+                    検索サイト
+                    <select id="helper-site">
+                      <option value="danbooru">Danbooru</option>
+                      <option value="gelbooru">Gelbooru</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <button type="button" id="helper-analyze-btn" class="secondary">🔍 Booruからアイデンティティを自動分析</button>
+                  <button type="button" id="helper-apply-all-btn" class="secondary hidden" style="background: #252839; border-color: #79ffe1; color: #79ffe1;">✨ 分析結果をフォームに一括反映</button>
+                </div>
+                <p id="helper-status" class="status"></p>
+
+                <div id="helper-results" class="helper-results hidden">
+                  <!-- 顔・頭部候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">👤 顔・頭部タグ候補 (髪型・髪色・瞳、クリックで顔タグ欄に追加):</span>
+                    <div id="helper-face-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- 身体DNA候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">👙 体型・身体タグ候補 (肌色・胸・体格、クリックで体型タグ欄に追加):</span>
+                    <div id="helper-body-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- 代表衣装候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">👗 代表衣装・アクセサリ候補 (クリックで衣装タグ欄に追加):</span>
+                    <div id="helper-costume-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- 作品名候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">📚 作品名タグ候補 (クリックで作品タグ欄に追加):</span>
+                    <div id="helper-series-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- ネガティブ候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">🚫 対立反意ネガティブ候補 (クリックでネガティブ欄に追加):</span>
+                    <div id="helper-negative-chips" class="tag-chips"></div>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <!-- 📝 ヒロイン編集フォーム -->
+            <form id="heroine-form">
+              <div class="editor-header">
+                <div class="editor-title">
+                  <span style="font-size: 1.4rem;">👸</span>
+                  <div>
+                    <h3 id="hm-editor-title">ヒロイン編集</h3>
+                    <span id="hm-editor-sub" style="font-size: 0.78rem; color: var(--text-dim); font-family: monospace;">yukikaze</span>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="submit" id="hm-save-btn">💾 保存する</button>
+                  <button type="button" id="hm-delete-btn" class="danger">🗑️ 削除</button>
+                </div>
+              </div>
+
+              <div class="form-row" style="margin-top: 12px;">
+                <label style="flex: 1;">
+                  ヒロインID (英数キー, 例: yukikaze)
+                  <input type="text" id="hm-key" required placeholder="yukikaze">
+                </label>
+                <label style="flex: 1.5;">
+                  表示名 (日本語, 例: 水城ゆきかぜ)
+                  <input type="text" id="hm-name" required placeholder="水城ゆきかぜ">
+                </label>
+                <label style="flex: 1.5;">
+                  デフォルトCheckpoint (任意)
+                  <input type="text" id="hm-checkpoint" placeholder="waiIllustriousSDXL_v160.safetensors">
+                </label>
+              </div>
+
+              <!-- ⚡ オーバーライドルール設定 (絶対遵守 vs 柔軟適応) -->
+              <div class="settings-card">
+                <div class="settings-card-title">⚡ オーバーライドルール (絶対遵守・適応ポリシー)</div>
+                <div class="form-row">
+                  <label style="flex: 1;">
+                    🍒 胸サイズ制御
+                    <select id="hm-rule-breasts">
+                      <option value="strict">🔒 絶対遵守 (Strict) - 元絵に関わらずヒロインの胸を強制固定 (ユキカゼ等)</option>
+                      <option value="flexible">🌊 柔軟適応 (Flexible) - 元絵の豊満サイズ (large~gigantic) を許容 (不知火等)</option>
+                      <option value="source">🎨 元絵維持 (Source) - 元絵の胸サイズタグをそのまま継承</option>
+                    </select>
+                  </label>
+                  <label style="flex: 1;">
+                    ☀️ 肌色制御
+                    <select id="hm-rule-skin">
+                      <option value="strict">🔒 絶対遵守 (Strict) - ヒロインの肌色・日焼けを強制固定</option>
+                      <option value="source">🎨 元絵維持 (Source) - 元絵の肌色をそのまま継承</option>
+                    </select>
+                  </label>
+                  <label style="flex: 1;">
+                    👗 衣装適用ポリシー
+                    <select id="hm-rule-costume">
+                      <option value="source">👗 元絵の衣装を着る (Source) - 元絵のシチュ服（着物・ビキニ等）に着替え</option>
+                      <option value="heroine">🦸 ヒロイン衣装を強制 (Heroine) - 元絵の服を脱いで代表衣装を着る</option>
+                      <option value="mix">✨ ハイブリッド (Mix) - 元絵衣装＋代表衣装アクセサリ</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <label>
+                アイデンティティタグ (キャラ名など置換後の核となるタグ。カンマまたは改行区切り)
+                <textarea id="hm-identity" rows="2" placeholder="mizuki yukikaze, taimanin \(series\)"></textarea>
+              </label>
+
+              <!-- 3大カテゴリ分類: 顔・体型・衣装 -->
+              <div class="form-row" style="gap: 12px;">
+                <label style="flex: 1;">
+                  👤 顔・頭部タグ (Face/Head: 髪型、髪色、瞳の色など)
+                  <textarea id="hm-face" rows="3" placeholder="very long hair, twintails, brown hair, pink eyes"></textarea>
+                </label>
+                <label style="flex: 1;">
+                  👙 体型・身体タグ (Body: 肌色、胸サイズ、くびれなど)
+                  <textarea id="hm-body" rows="3" placeholder="dark skin, one-piece tan, small breasts, slender, slim waist"></textarea>
+                </label>
+              </div>
+
+              <label>
+                👗 代表衣装タグ (Costume: デフォルト衣装やアクセサリ)
+                <textarea id="hm-costume" rows="2" placeholder="taimanin suit, leotard, gloves, thighhighs"></textarea>
+              </label>
+
+              <div class="form-row">
+                <label style="flex: 1;">
+                  作品名タグ (除外せず保持したいシリーズタグ)
+                  <input type="text" id="hm-series" placeholder="taimanin \(series\)">
+                </label>
+                <label style="flex: 1;">
+                  代表絵師タグ (任意、ヒロイン固定時に使用)
+                  <input type="text" id="hm-artist" placeholder="artist:aoi nagisa">
+                </label>
+              </div>
+
+              <label>
+                固有ネガティブタグ (このヒロイン生成時に追加する除外タグ)
+                <textarea id="hm-negative" rows="2" placeholder="fair skin, large breasts"></textarea>
+              </label>
+
+              <p id="hm-status" class="status"></p>
+            </form>
+          </div>
+        </div>
       </div>
 
-      <!-- 🔍 Booruタグ分析ヘルパー（アコーディオン） -->
-      <details class="purge-details" id="heroine-helper-details" style="margin: 14px 0;" open>
-        <summary>🤖 Booruタグ出現頻度分析ヘルパー (新ヒロイン自動設定)</summary>
-        <div style="padding: 12px 6px;">
-          <p class="hint" style="margin-top: 0;">Danbooru / Gelbooru でキャラクター名を検索し、採用率・頻度上位のタグを解析して身体DNAや衣装、対立ネガティブを自動サジェストします。</p>
+      <!-- ══════════════════════════════════════════
+           サブペイン 2: 除外タグ・品質ルール (Purge & Rules)
+           ══════════════════════════════════════════ -->
+      <div id="subpane-purge" class="settings-subpane">
+        <section id="purge-panel" class="panel">
+          <div class="gallery-header">
+            <h2>🛡️ 除外タグ管理 (Purge Tags)</h2>
+            <div class="header-actions">
+              <button type="button" id="purge-reload-btn" class="secondary">🔄 再読込</button>
+              <button type="button" id="purge-save-btn">💾 保存＆反映</button>
+            </div>
+          </div>
+          <p class="hint">プロンプトから削るタグ（ノイズ除去・属性衝突防止）。Base層（公式辞書）にUser層（独自設定）が自動マージされます。</p>
+
+          <h3>User独自パージタグ</h3>
+          <label>
+            追加・編集 (1行に1タグ、またはカンマ区切りで入力)
+            <textarea id="user-purge-input" rows="4" placeholder="例:&#10;speech bubble&#10;3d&#10;realistic"></textarea>
+          </label>
+          <div class="chips-container-label">登録中のUserパージタグ (クリックで削除):</div>
+          <div id="user-purge-chips" class="tag-chips"></div>
+
+          <div id="purge-info" class="status" style="margin: 12px 0;"></div>
+
+          <div class="base-purge-section">
+            <h3>Base層（公式共通ルール）の設定・閲覧</h3>
+            <p class="hint">Baseタグをクリックすると「除外解除（プロンプトに残す）」を切り替えられます。</p>
+            
+            <details class="purge-details" open>
+              <summary>🎨 画面ノイズ・透かし系 (<span id="base-artifact-count">0</span>タグ)</summary>
+              <div id="base-artifact-chips" class="tag-chips"></div>
+            </details>
+
+            <details class="purge-details" style="margin-top: 8px;">
+              <summary>📋 メタタグ・投稿管理系 (<span id="base-meta-count">0</span>タグ)</summary>
+              <div id="base-meta-chips" class="tag-chips"></div>
+            </details>
+          </div>
+        </section>
+
+        <!-- バックアップ＆タイムマシーン復元 -->
+        <section id="backup-panel" class="panel">
+          <h2>💾 バックアップ ＆ タイムマシーン復元</h2>
+          <p class="hint">タグやヒロインを保存するたびに直前の状態が自動退避されます。うっかり消してしまっても過去の時点を選んでワンクリック復元できます。</p>
           <div class="form-row">
-            <label style="flex: 2;">
-              キャラクタータグ名 (例: mizuki_yukikaze, asuka_langley_soryu)
-              <input type="text" id="helper-char-name" placeholder="mizuki_yukikaze">
-            </label>
             <label style="flex: 1;">
-              検索モード
-              <select id="helper-search-mode">
-                <option value="auto">自動 (公式優先→人気順)</option>
-                <option value="official">公式原画 (official_art)</option>
-                <option value="popular">人気順 (1girl solo スコア順)</option>
-                <option value="all">全投稿</option>
+              過去の自動バックアップ一覧
+              <select id="backup-select">
+                <option value="">バックアップを読み込み中...</option>
               </select>
             </label>
-            <label style="flex: 1;">
-              検索サイト
-              <select id="helper-site">
-                <option value="danbooru">Danbooru</option>
-                <option value="gelbooru">Gelbooru</option>
-              </select>
-            </label>
+            <button type="button" id="backup-restore-btn" class="secondary">🕒 この時点に復元</button>
           </div>
-          <div class="form-row">
-            <button type="button" id="helper-analyze-btn" class="secondary">🔍 Booruからアイデンティティを自動分析</button>
-            <button type="button" id="helper-apply-all-btn" class="secondary hidden" style="background: #252839; border-color: #79ffe1; color: #79ffe1;">✨ 分析結果をフォームに一括反映</button>
-          </div>
-          <p id="helper-status" class="status"></p>
+          <p id="backup-status" class="status"></p>
+        </section>
+      </div>
 
-          <div id="helper-results" class="helper-results hidden">
-            <!-- 顔・頭部候補 -->
-            <div class="helper-section">
-              <span class="helper-section-title">👤 顔・頭部タグ候補 (髪型・髪色・瞳、クリックで顔タグ欄に追加):</span>
-              <div id="helper-face-chips" class="tag-chips"></div>
-            </div>
-            <!-- 身体DNA候補 -->
-            <div class="helper-section">
-              <span class="helper-section-title">👙 体型・身体タグ候補 (肌色・胸・体格、クリックで体型タグ欄に追加):</span>
-              <div id="helper-body-chips" class="tag-chips"></div>
-            </div>
-            <!-- 代表衣装候補 -->
-            <div class="helper-section">
-              <span class="helper-section-title">👗 代表衣装・アクセサリ候補 (クリックで衣装タグ欄に追加):</span>
-              <div id="helper-costume-chips" class="tag-chips"></div>
-            </div>
-            <!-- 作品名候補 -->
-            <div class="helper-section">
-              <span class="helper-section-title">📚 作品名タグ候補 (クリックで作品タグ欄に追加):</span>
-              <div id="helper-series-chips" class="tag-chips"></div>
-            </div>
-            <!-- ネガティブ候補 -->
-            <div class="helper-section">
-              <span class="helper-section-title">🚫 対立反意ネガティブ候補 (クリックでネガティブ欄に追加):</span>
-              <div id="helper-negative-chips" class="tag-chips"></div>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <!-- ヒロイン編集フォーム -->
-      <form id="heroine-form">
-        <div class="form-row">
-          <label style="flex: 1;">
-            ヒロインID (英数キー, 例: yukikaze)
-            <input type="text" id="hm-key" required placeholder="yukikaze">
-          </label>
-          <label style="flex: 1.5;">
-            表示名 (日本語, 例: 水城ゆきかぜ)
-            <input type="text" id="hm-name" required placeholder="水城ゆきかぜ">
-          </label>
-          <label style="flex: 1.5;">
-            デフォルトCheckpoint (任意)
-            <input type="text" id="hm-checkpoint" placeholder="waiIllustriousSDXL_v160.safetensors">
-          </label>
-        </div>
-
-        <label>
-          アイデンティティタグ (キャラ名など置換後の核となるタグ。カンマまたは改行区切り)
-          <textarea id="hm-identity" rows="2" placeholder="mizuki yukikaze, taimanin \(series\)"></textarea>
-        </label>
-
-        <!-- 3大カテゴリ分類: 顔・体型・衣装 -->
-        <div class="form-row" style="gap: 12px;">
-          <label style="flex: 1;">
-            👤 顔・頭部タグ (Face/Head: 髪型、髪色、瞳の色など)
-            <textarea id="hm-face" rows="3" placeholder="very long hair, twintails, brown hair, pink eyes"></textarea>
-          </label>
-          <label style="flex: 1;">
-            👙 体型・身体タグ (Body: 肌色、胸サイズ、くびれなど)
-            <textarea id="hm-body" rows="3" placeholder="dark skin, one-piece tan, small breasts, slender, slim waist"></textarea>
-          </label>
-        </div>
-
-        <label>
-          👗 代表衣装タグ (Costume: デフォルト衣装やアクセサリ)
-          <textarea id="hm-costume" rows="2" placeholder="taimanin suit, leotard, gloves, thighhighs"></textarea>
-        </label>
-
-        <!-- ⚡ オーバーライドルール設定 (絶対遵守 vs 柔軟適応) -->
-        <div style="background: #13151f; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0;">
-          <span style="font-size: 0.85rem; font-weight: bold; color: var(--accent);">⚡ オーバーライドルール設定 (絶対遵守・適応ポリシー)</span>
-          <p class="hint" style="margin-top: 4px; margin-bottom: 10px;">キャラごとの「絶対に崩してはならない属性」と「元絵に合わせて柔軟に受け入れる属性」を個別に指定します。</p>
+      <!-- ══════════════════════════════════════════
+           サブペイン 3: サイト認証・APIキー (Auth & API)
+           ══════════════════════════════════════════ -->
+      <div id="subpane-auth" class="settings-subpane">
+        <section id="site-auth-panel" class="panel">
+          <h2>🔑 外部サイト認証・APIキー設定</h2>
+          <p class="hint">CivitaiのNSFW（成人向け）画像取得や、Danbooru / Gelbooru のAPI制限緩和に必要な認証キーを設定します（全て任意・未設定でも多くの機能は動作します）。</p>
           
           <div class="form-row">
+            <label style="flex: 2;">
+              Civitai API Key (Personal Access Token)
+              <input type="password" id="auth-civitai-key" placeholder="Civitaiアカウント設定 > API Keys で作成したトークン">
+            </label>
+          </div>
+          <p class="hint" style="margin-top: -6px; margin-bottom: 12px; font-size: 0.75rem; color: #888;">
+            ※ CivitaiでNSFW（R/X/XXX）画像のプロンプトを取得する場合、Civitaiの無料アカウントから発行できるAPI Keyが必須となります。
+          </p>
+
+          <div class="form-row">
             <label style="flex: 1;">
-              🍒 胸サイズ制御
-              <select id="hm-rule-breasts">
-                <option value="strict">🔒 絶対遵守 (Strict) - 元絵に関わらずヒロインの胸を強制固定 (ユキカゼ等)</option>
-                <option value="flexible">🌊 柔軟適応 (Flexible) - 元絵の豊満サイズ (large~gigantic) を許容 (不知火等)</option>
-                <option value="source">🎨 元絵維持 (Source) - 元絵の胸サイズタグをそのまま継承</option>
-              </select>
+              Danbooru Login (ユーザー名)
+              <input type="text" id="auth-danbooru-login" placeholder="Danbooruのユーザー名">
+            </label>
+            <label style="flex: 1.5;">
+              Danbooru API Key
+              <input type="password" id="auth-danbooru-key" placeholder="Danbooruのアカウント設定から取得">
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label style="flex: 1;">
+              Gelbooru User ID (数値)
+              <input type="text" id="auth-gelbooru-uid" placeholder="GelbooruのアカウントID (例: 123456)">
+            </label>
+            <label style="flex: 1.5;">
+              Gelbooru API Key
+              <input type="password" id="auth-gelbooru-key" placeholder="Gelbooruのアカウント設定から取得">
+            </label>
+          </div>
+
+          <div class="form-row" style="margin-top: 8px;">
+            <button type="button" id="auth-save-btn">💾 APIキー設定を保存</button>
+          </div>
+          <p id="auth-status" class="status"></p>
+        </section>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           サブペイン 4: 通知・システム運用 (System)
+           ══════════════════════════════════════════ -->
+      <div id="subpane-system" class="settings-subpane">
+        <section id="notification-panel" class="panel">
+          <h2>🔔 Discord通知設定</h2>
+          <p class="hint">生成完了やエラー発生時のDiscord Webhook通知を設定します。</p>
+          <div class="form-row">
+            <label style="flex: 2;">
+              Webhook URL
+              <input type="url" id="notif-webhook-url" placeholder="https://discord.com/api/webhooks/...">
             </label>
             <label style="flex: 1;">
-              ☀️ 肌色制御
-              <select id="hm-rule-skin">
-                <option value="strict">🔒 絶対遵守 (Strict) - ヒロインの肌色・日焼けを強制固定</option>
-                <option value="source">🎨 元絵維持 (Source) - 元絵の肌色をそのまま継承</option>
-              </select>
-            </label>
-            <label style="flex: 1;">
-              👗 衣装適用ポリシー
-              <select id="hm-rule-costume">
-                <option value="source">👗 元絵の衣装を着る (Source) - 元絵のシチュ服（着物・ビキニ等）に着替え</option>
-                <option value="heroine">🦸 ヒロイン衣装を強制 (Heroine) - 元絵の服を脱いで代表衣装を着る</option>
-                <option value="mix">✨ ハイブリッド (Mix) - 元絵衣装＋代表衣装アクセサリ</option>
+              通知レベル
+              <select id="notif-level">
+                <option value="success">success (成功・エラー時)</option>
+                <option value="error_only">error_only (エラー発生時のみ)</option>
+                <option value="debug">debug (全詳細ログ)</option>
+                <option value="none">none (通知無効)</option>
               </select>
             </label>
           </div>
-        </div>
+          <div class="form-row">
+            <label class="checkbox">
+              <input type="checkbox" id="notif-include-image">
+              🖼️ 生成画像をDiscordに直接添付する (大画面プレビュー)
+            </label>
+          </div>
+          <div class="form-row">
+            <button type="button" id="notif-save-btn">💾 通知設定を保存</button>
+            <button type="button" id="notif-test-btn" class="secondary">🧪 テスト通知を送信</button>
+          </div>
+          <p id="notif-status" class="status"></p>
+        </section>
 
-        <div class="form-row">
-          <label style="flex: 1;">
-            作品名タグ (除外せず保持したいシリーズタグ)
-            <input type="text" id="hm-series" placeholder="taimanin \(series\)">
-          </label>
-          <label style="flex: 1;">
-            代表絵師タグ (任意、ヒロイン固定時に使用)
-            <input type="text" id="hm-artist" placeholder="artist:aoi nagisa">
-          </label>
-        </div>
-
-        <label>
-          固有ネガティブタグ (このヒロイン生成時に追加する除外タグ)
-          <textarea id="hm-negative" rows="2" placeholder="fair skin, large breasts"></textarea>
-        </label>
-
-        <div class="form-row" style="margin-top: 8px;">
-          <button type="submit" id="hm-save-btn">💾 このヒロインを保存</button>
-          <button type="button" id="hm-delete-btn" class="danger">🗑️ このヒロインを削除</button>
-        </div>
-        <p id="hm-status" class="status"></p>
-      </form>
-
-    </section>
-
-    <section id="purge-panel" class="panel">
-
-      <div class="gallery-header">
-        <h2>🛡️ 除外タグ管理 (Purge Tags)</h2>
-        <div class="header-actions">
-          <button type="button" id="purge-reload-btn" class="secondary">🔄 再読込</button>
-          <button type="button" id="purge-save-btn">💾 保存＆反映</button>
-        </div>
-      </div>
-      <p class="hint">プロンプトから削るタグ（ノイズ除去・属性衝突防止）。Base層（公式辞書）にUser層（独自設定）が自動マージされます。</p>
-
-      <h3>User独自パージタグ</h3>
-      <label>
-        追加・編集 (1行に1タグ、またはカンマ区切りで入力)
-        <textarea id="user-purge-input" rows="4" placeholder="例:&#10;speech bubble&#10;3d&#10;realistic"></textarea>
-      </label>
-      <div class="chips-container-label">登録中のUserパージタグ (クリックで削除):</div>
-      <div id="user-purge-chips" class="tag-chips"></div>
-
-      <div id="purge-info" class="status" style="margin: 12px 0;"></div>
-
-      <div class="base-purge-section">
-        <h3>Base層（公式共通ルール）の設定・閲覧</h3>
-        <p class="hint">Baseタグをクリックすると「除外解除（プロンプトに残す）」を切り替えられます。</p>
-        
-        <details class="purge-details" open>
-          <summary>🎨 画面ノイズ・透かし系 (<span id="base-artifact-count">0</span>タグ)</summary>
-          <div id="base-artifact-chips" class="tag-chips"></div>
-        </details>
-
-        <details class="purge-details" style="margin-top: 8px;">
-          <summary>📋 メタタグ・投稿管理系 (<span id="base-meta-count">0</span>タグ)</summary>
-          <div id="base-meta-chips" class="tag-chips"></div>
-        </details>
-      </div>
-    </section>
-
-
-    <section id="backup-panel" class="panel">
-      <h2>💾 バックアップ ＆ タイムマシーン復元</h2>
-      <p class="hint">タグを保存するたびに直前の状態が自動退避されます。うっかり消してしまっても過去の時点を選んでワンクリック復元できます。</p>
-      <div class="form-row">
-        <label style="flex: 1;">
-          過去の自動バックアップ一覧
-          <select id="backup-select">
-            <option value="">バックアップを読み込み中...</option>
-          </select>
-        </label>
-        <button type="button" id="backup-restore-btn" class="secondary">🕒 この時点に復元</button>
-      </div>
-      <p id="backup-status" class="status"></p>
-    </section>
-
-    <section id="notification-panel" class="panel">
-      <h2>🔔 Discord通知設定</h2>
-      <p class="hint">生成完了やエラー発生時のDiscord Webhook通知を設定します。</p>
-      <div class="form-row">
-        <label style="flex: 2;">
-          Webhook URL
-          <input type="url" id="notif-webhook-url" placeholder="https://discord.com/api/webhooks/...">
-        </label>
-        <label style="flex: 1;">
-          通知レベル
-          <select id="notif-level">
-            <option value="success">success (成功・エラー時)</option>
-            <option value="error_only">error_only (エラー発生時のみ)</option>
-            <option value="debug">debug (全詳細ログ)</option>
-            <option value="none">none (通知無効)</option>
-          </select>
-        </label>
-      </div>
-      <div class="form-row">
-        <label class="checkbox">
-          <input type="checkbox" id="notif-include-image">
-          🖼️ 生成画像をDiscordに直接添付する (大画面プレビュー)
-        </label>
-      </div>
-      <div class="form-row">
-        <button type="button" id="notif-save-btn">💾 通知設定を保存</button>
-        <button type="button" id="notif-test-btn" class="secondary">🧪 テスト通知を送信</button>
-      </div>
-      <p id="notif-status" class="status"></p>
-    </section>
-
-    <section id="site-auth-panel" class="panel">
-      <h2>🔑 外部サイト認証・APIキー設定</h2>
-      <p class="hint">CivitaiのNSFW（成人向け）画像取得や、Danbooru / Gelbooru のAPI制限緩和に必要な認証キーを設定します（全て任意・未設定でも多くの機能は動作します）。</p>
-      
-      <div class="form-row">
-        <label style="flex: 2;">
-          Civitai API Key (Personal Access Token)
-          <input type="password" id="auth-civitai-key" placeholder="Civitaiアカウント設定 > API Keys で作成したトークン">
-        </label>
-      </div>
-      <p class="hint" style="margin-top: -6px; margin-bottom: 12px; font-size: 0.75rem; color: #888;">
-        ※ CivitaiでNSFW（R/X/XXX）画像のプロンプトを取得する場合、Civitaiの無料アカウントから発行できるAPI Keyが必須となります。
-      </p>
-
-      <div class="form-row">
-        <label style="flex: 1;">
-          Danbooru Login (ユーザー名)
-          <input type="text" id="auth-danbooru-login" placeholder="Danbooruのユーザー名">
-        </label>
-        <label style="flex: 1.5;">
-          Danbooru API Key
-          <input type="password" id="auth-danbooru-key" placeholder="Danbooruのアカウント設定から取得">
-        </label>
+        <section id="system-panel" class="panel">
+          <h2>⚙️ システム運用</h2>
+          <div class="form-row">
+            <button type="button" id="config-reload-btn" class="secondary">🔄 設定ファイル（config.yaml）の再読み込み</button>
+          </div>
+          <p id="system-status" class="status"></p>
+        </section>
       </div>
 
-      <div class="form-row">
-        <label style="flex: 1;">
-          Gelbooru User ID (数値)
-          <input type="text" id="auth-gelbooru-uid" placeholder="GelbooruのアカウントID (例: 123456)">
-        </label>
-        <label style="flex: 1.5;">
-          Gelbooru API Key
-          <input type="password" id="auth-gelbooru-key" placeholder="Gelbooruのアカウント設定から取得">
-        </label>
-      </div>
-
-      <div class="form-row" style="margin-top: 8px;">
-        <button type="button" id="auth-save-btn">💾 APIキー設定を保存</button>
-      </div>
-      <p id="auth-status" class="status"></p>
-    </section>
-
-    <section id="system-panel" class="panel">
-      <h2>⚙️ システム運用</h2>
-      <div class="form-row">
-        <button type="button" id="config-reload-btn" class="secondary">🔄 設定ファイル（config.yaml）の再読み込み</button>
-      </div>
-      <p id="system-status" class="status"></p>
-    </section>
+    </div>
   </div>
+
 
 
 </main>

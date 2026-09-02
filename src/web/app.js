@@ -967,7 +967,9 @@ if (authSaveBtn) {
   });
 }
 
-const heroineMgmtSelect = document.getElementById("heroine-mgmt-select");
+const heroineCardList = document.getElementById("heroine-card-list");
+const hmEditorTitle = document.getElementById("hm-editor-title");
+const hmEditorSub = document.getElementById("hm-editor-sub");
 const heroineNewBtn = document.getElementById("heroine-new-btn");
 const helperCharName = document.getElementById("helper-char-name");
 const helperSearchMode = document.getElementById("helper-search-mode");
@@ -1002,6 +1004,18 @@ const hmStatusEl = document.getElementById("hm-status");
 
 let heroinesDetailsCache = {};
 let lastAnalysisResult = null;
+let currentHeroineKey = null;
+
+// 設定サブタブの切り替え
+document.querySelectorAll(".settings-subnav-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".settings-subnav-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".settings-subpane").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    const target = document.getElementById(btn.dataset.subpane);
+    if (target) target.classList.add("active");
+  });
+});
 
 function appendTagToTextarea(textarea, tag) {
   if (!textarea || !tag) return;
@@ -1014,28 +1028,70 @@ function appendTagToTextarea(textarea, tag) {
 }
 
 async function loadHeroinesDetails() {
-  if (!heroineMgmtSelect) return;
   try {
     const res = await fetch(`${API_BASE}/heroines/details`);
     if (!res.ok) return;
     const data = await res.json();
     heroinesDetailsCache = data.heroines || {};
-    const keys = Object.keys(heroinesDetailsCache);
-    heroineMgmtSelect.innerHTML = keys
-      .map(k => `<option value="${k}">${escapeHtml(heroinesDetailsCache[k].name || k)} (${k})</option>`)
-      .join("");
+    renderHeroineCardList();
 
+    const keys = Object.keys(heroinesDetailsCache);
     if (keys.length > 0) {
-      populateHeroineForm(keys[0]);
+      selectHeroine(keys.includes(currentHeroineKey) ? currentHeroineKey : keys[0]);
+    } else {
+      resetHeroineFormNew();
     }
   } catch (err) {
     console.error("Failed to load heroines details:", err);
   }
 }
 
+function renderHeroineCardList() {
+  if (!heroineCardList) return;
+  const keys = Object.keys(heroinesDetailsCache);
+  if (keys.length === 0) {
+    heroineCardList.innerHTML = `<div style="color: #666; font-size: 0.8rem; padding: 8px;">登録ヒロインなし</div>`;
+    return;
+  }
+  heroineCardList.innerHTML = keys.map(k => {
+    const h = heroinesDetailsCache[k] || {};
+    const rules = h.override_rules || {};
+    const isFlex = rules.breasts === "flexible";
+    const badgeHtml = isFlex
+      ? `<span class="rule-badge flexible">🌊 Flexible</span>`
+      : `<span class="rule-badge strict">🔒 Strict</span>`;
+    const isActive = k === currentHeroineKey ? "active" : "";
+
+    return `
+      <div class="heroine-card ${isActive}" data-key="${escapeHtml(k)}">
+        <div class="heroine-card-info">
+          <span class="heroine-card-name">${escapeHtml(h.name || k)}</span>
+          <span class="heroine-card-key">${escapeHtml(k)}</span>
+        </div>
+        ${badgeHtml}
+      </div>
+    `;
+  }).join("");
+
+  heroineCardList.querySelectorAll(".heroine-card").forEach(el => {
+    el.addEventListener("click", () => {
+      selectHeroine(el.dataset.key);
+    });
+  });
+}
+
+function selectHeroine(key) {
+  currentHeroineKey = key;
+  renderHeroineCardList();
+  populateHeroineForm(key);
+}
+
 function populateHeroineForm(key) {
   const h = heroinesDetailsCache[key];
   if (!h) return;
+  if (hmEditorTitle) hmEditorTitle.textContent = h.name || key;
+  if (hmEditorSub) hmEditorSub.textContent = `ID: ${key}`;
+
   hmKey.value = key;
   hmKey.readOnly = true; // 既存編集時はキー変更不可
   hmName.value = h.name || "";
@@ -1054,35 +1110,38 @@ function populateHeroineForm(key) {
   hmArtist.value = (h.artist_tags || []).join(", ");
   hmNegative.value = (h.negative_tags || []).join(", ");
   if (hmDeleteBtn) hmDeleteBtn.style.display = "";
+  setStatus(hmStatusEl, "");
 }
 
-if (heroineMgmtSelect) {
-  heroineMgmtSelect.addEventListener("change", () => {
-    populateHeroineForm(heroineMgmtSelect.value);
-  });
+function resetHeroineFormNew() {
+  currentHeroineKey = null;
+  renderHeroineCardList();
+  if (hmEditorTitle) hmEditorTitle.textContent = "新しいヒロインを作成";
+  if (hmEditorSub) hmEditorSub.textContent = "新規登録モード";
+
+  hmKey.value = "";
+  hmKey.readOnly = false;
+  hmName.value = "";
+  hmCheckpoint.value = "";
+  hmIdentity.value = "";
+  hmFace.value = "";
+  hmBody.value = "";
+  hmCostume.value = "";
+  if (hmRuleBreasts) hmRuleBreasts.value = "strict";
+  if (hmRuleSkin) hmRuleSkin.value = "strict";
+  if (hmRuleCostume) hmRuleCostume.value = "source";
+  hmSeries.value = "";
+  hmArtist.value = "";
+  hmNegative.value = "";
+  if (hmDeleteBtn) hmDeleteBtn.style.display = "none";
+  hmKey.focus();
+  setStatus(hmStatusEl, "新しいヒロインの情報を入力するか、上のBooruヘルパーで自動生成してね♪", "ok");
 }
 
 if (heroineNewBtn) {
-  heroineNewBtn.addEventListener("click", () => {
-    hmKey.value = "";
-    hmKey.readOnly = false;
-    hmName.value = "";
-    hmCheckpoint.value = "";
-    hmIdentity.value = "";
-    hmFace.value = "";
-    hmBody.value = "";
-    hmCostume.value = "";
-    if (hmRuleBreasts) hmRuleBreasts.value = "strict";
-    if (hmRuleSkin) hmRuleSkin.value = "strict";
-    if (hmRuleCostume) hmRuleCostume.value = "source";
-    hmSeries.value = "";
-    hmArtist.value = "";
-    hmNegative.value = "";
-    if (hmDeleteBtn) hmDeleteBtn.style.display = "none";
-    hmKey.focus();
-    setStatus(hmStatusEl, "新しいヒロインの情報を入力するか、上のBooruヘルパーで自動生成してね♪", "ok");
-  });
+  heroineNewBtn.addEventListener("click", resetHeroineFormNew);
 }
+
 
 // 🔍 Booruタグ分析ヘルパー
 if (helperAnalyzeBtn) {
@@ -1268,8 +1327,7 @@ if (heroineForm) {
 
       await loadHeroines();
       await loadHeroinesDetails();
-      heroineMgmtSelect.value = key;
-      populateHeroineForm(key);
+      selectHeroine(key);
       await loadBackups();
       setStatus(hmStatusEl, `✅ ヒロイン '${heroineData.name}' を保存・反映しました！`, "success");
     } catch (err) {
@@ -1290,10 +1348,12 @@ if (hmDeleteBtn) {
     try {
       const res = await fetch(`${API_BASE}/heroines/${key}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      currentHeroineKey = null;
       await loadHeroines();
       await loadHeroinesDetails();
       await loadBackups();
       setStatus(hmStatusEl, `✅ ヒロイン '${key}' を削除しました`, "success");
+
     } catch (err) {
       setStatus(hmStatusEl, `❌ 削除失敗: ${err.message}`, "error");
     } finally {
