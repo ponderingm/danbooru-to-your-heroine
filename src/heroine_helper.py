@@ -147,9 +147,9 @@ def search_and_analyze_heroine(
         "costume": "source",
     }
     if is_small_chest:
-        suggested_override_rules["breasts"] = "strict"    # ユキカゼ等: 小胸は絶対に変化させない絶対遵守
+        suggested_override_rules["breasts"] = "strict"  # 小胸は絶対に変化させないヒロイン固定
     elif is_large_chest:
-        suggested_override_rules["breasts"] = "flexible"  # 不知火等: large〜giganticまで柔軟に追従
+        suggested_override_rules["breasts"] = "source"  # 元絵のサイズ (large~gigantic等) を活かす元絵維持
     else:
         suggested_override_rules["breasts"] = "strict"
 

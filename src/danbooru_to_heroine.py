@@ -308,32 +308,20 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     breasts_mode = override_rules.get("breasts", "strict")
     costume_mode = override_rules.get("costume", "source")
 
-    detected_flexible_breasts = set()
+    detected_source_breasts = set()
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:
         tag_norm = tag.replace("_", " ").lower()
 
-        # 胸サイズ判定（オーバーライドルール）
+        # 胸サイズ判定（オーバーライドルール: strict = ヒロイン固定, source = 元絵維持）
         if tag_norm in BREAST_TAGS:
-            if breasts_mode == "strict":
-                removed_tags.append(tag_norm)
-                continue
-            elif breasts_mode == "flexible":
-                # ヒロイン側の身体タグに豊満系があるか判定
-                heroine_body_all = [t.replace("_", " ").lower() for t in (dna.get("body_tags", []) + dna.get("identity_tags", []))]
-                is_heroine_large = any(b in LARGE_BREAST_FAMILY for b in heroine_body_all)
-                if is_heroine_large and tag_norm in LARGE_BREAST_FAMILY:
-                    # 不知火のように元絵がlarge~giganticならそのまま許容・採用
-                    situation_tags.append(tag.replace("_", " "))
-                    detected_flexible_breasts.add(tag_norm)
-                    continue
-                else:
-                    removed_tags.append(tag_norm)
-                    continue
-            elif breasts_mode == "source":
+            if breasts_mode == "source":
                 situation_tags.append(tag.replace("_", " "))
-                detected_flexible_breasts.add(tag_norm)
+                detected_source_breasts.add(tag_norm)
+                continue
+            else:  # "strict" or default
+                removed_tags.append(tag_norm)
                 continue
 
         if tag_norm in negative_tags:
@@ -363,8 +351,8 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     body_tags = list(dna.get("body_tags", []))
     costume_tags = dna.get("costume_tags", [])
 
-    # もし元絵の胸タグがflexible採用されていた場合、ヒロイン側の胸タグと二重にならないよう除外
-    if detected_flexible_breasts:
+    # 元絵の胸タグが維持(source)された場合、ヒロイン側の胸タグと二重にならないよう除外
+    if detected_source_breasts:
         body_tags = [b for b in body_tags if b.replace("_", " ").lower() not in BREAST_TAGS]
 
     # 衣装モード判定

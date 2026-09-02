@@ -755,7 +755,8 @@ button.danger {
   border: 1px solid rgba(121, 255, 225, 0.3);
 }
 
-.rule-badge.flexible {
+.rule-badge.flexible,
+.rule-badge.source {
   background: rgba(255, 121, 198, 0.15);
   color: #ff79c6;
   border: 1px solid rgba(255, 121, 198, 0.3);

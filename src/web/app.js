@@ -1056,9 +1056,9 @@ function renderHeroineCardList() {
   heroineCardList.innerHTML = keys.map(k => {
     const h = heroinesDetailsCache[k] || {};
     const rules = h.override_rules || {};
-    const isFlex = rules.breasts === "flexible";
-    const badgeHtml = isFlex
-      ? `<span class="rule-badge flexible">🌊 Flexible</span>`
+    const isSource = rules.breasts === "source" || rules.breasts === "flexible";
+    const badgeHtml = isSource
+      ? `<span class="rule-badge source">🎨 Source</span>`
       : `<span class="rule-badge strict">🔒 Strict</span>`;
     const isActive = k === currentHeroineKey ? "active" : "";
 
