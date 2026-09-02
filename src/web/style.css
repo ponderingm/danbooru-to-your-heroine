@@ -19,9 +19,17 @@ body {
 }
 
 header {
-  padding: 24px 32px 0;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(20, 21, 26, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 14px 32px 0;
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
+
 
 .header-main {
   display: flex;
