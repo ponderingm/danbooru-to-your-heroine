@@ -98,3 +98,22 @@ def notify_success(
             requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
     except Exception as e:
         print(f"⚠️ [notify.py] Discord通知送信エラー (無視): {e}")
+
+
+def send_test_notification(webhook_url: Optional[str] = None) -> bool:
+    """Discord Webhook への疎通テスト通知を送信する"""
+    url = (webhook_url or getattr(config, "DISCORD_WEBHOOK_URL", "")).strip()
+    if not url:
+        return False
+    embed = {
+        "title": "⚡ 【通知テスト】danbooru-to-your-heroine",
+        "description": "Discord Webhook 通知の疎通テストに成功したわ！\n生成完了時やエラー時の通知がここへ届くようになるわよ♪",
+        "color": 0x7928CA,
+    }
+    try:
+        res = requests.post(url, json={"embeds": [embed]}, timeout=8)
+        return res.status_code in (200, 204)
+    except Exception as e:
+        print(f"⚠️ [notify.py] テスト通知送信エラー: {e}")
+        return False
+

@@ -752,7 +752,42 @@ def trigger_reload_config():
     return {"status": "ok", "message": "config reloaded successfully"}
 
 
+class NotificationConfigRequest(BaseModel):
+    webhook_url: str
+    notify_level: str
+    include_image: bool
+
+
+@app.get("/config/notification")
+def get_notification_config():
+    """現在のDiscord通知設定を取得"""
+    discord_cfg = getattr(config, "USER_CONFIG", {}).get("discord", {})
+    return {
+        "webhook_url": discord_cfg.get("webhook_url", ""),
+        "notify_level": discord_cfg.get("notify_level", "success"),
+        "include_image": discord_cfg.get("include_image", True),
+    }
+
+
+@app.post("/config/notification")
+def update_notification_config(req: NotificationConfigRequest):
+    """Discord通知設定を保存してホットリロード"""
+    config.save_notification_config(req.webhook_url, req.notify_level, req.include_image)
+    return {"status": "ok"}
+
+
+@app.post("/notify/test")
+def test_discord_notification():
+    """現在の設定でDiscordへテスト通知を送信"""
+    from notify import send_test_notification
+    ok = send_test_notification()
+    if not ok:
+        raise HTTPException(status_code=400, detail="Discordへの送信に失敗しました。Webhook URLが正しいか確認してください。")
+    return {"status": "ok", "message": "テスト通知を送信しました"}
+
+
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
 
 
 if os.path.isdir(WEB_DIR):

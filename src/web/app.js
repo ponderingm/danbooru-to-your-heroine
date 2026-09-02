@@ -803,6 +803,70 @@ if (configReloadBtn) {
   });
 }
 
+const notifWebhookUrl = document.getElementById("notif-webhook-url");
+const notifLevel = document.getElementById("notif-level");
+const notifIncludeImage = document.getElementById("notif-include-image");
+const notifSaveBtn = document.getElementById("notif-save-btn");
+const notifTestBtn = document.getElementById("notif-test-btn");
+const notifStatusEl = document.getElementById("notif-status");
+
+async function loadNotificationConfig() {
+  if (!notifWebhookUrl) return;
+  try {
+    const res = await fetch(`${API_BASE}/config/notification`);
+    if (!res.ok) return;
+    const data = await res.json();
+    notifWebhookUrl.value = data.webhook_url || "";
+    if (notifLevel) notifLevel.value = data.notify_level || "success";
+    if (notifIncludeImage) notifIncludeImage.checked = !!data.include_image;
+  } catch (err) {
+    console.error("Failed to load notification config:", err);
+  }
+}
+
+if (notifSaveBtn) {
+  notifSaveBtn.addEventListener("click", async () => {
+    notifSaveBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/config/notification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhook_url: notifWebhookUrl.value.trim(),
+          notify_level: notifLevel.value,
+          include_image: notifIncludeImage.checked,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadBackups();
+      setStatus(notifStatusEl, "✅ Discord通知設定を保存し、即時反映しました！", "success");
+    } catch (err) {
+      setStatus(notifStatusEl, `❌ 保存失敗: ${err.message}`, "error");
+    } finally {
+      notifSaveBtn.disabled = false;
+    }
+  });
+}
+
+if (notifTestBtn) {
+  notifTestBtn.addEventListener("click", async () => {
+    notifTestBtn.disabled = true;
+    setStatus(notifStatusEl, "テスト通知送信中…");
+    try {
+      const res = await fetch(`${API_BASE}/notify/test`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      setStatus(notifStatusEl, "✅ Discordへテスト通知を送信しました！チャンネルを確認してね♪", "success");
+    } catch (err) {
+      setStatus(notifStatusEl, `❌ 送信失敗: ${err.message}`, "error");
+    } finally {
+      notifTestBtn.disabled = false;
+    }
+  });
+}
+
 (async function init() {
   // 保存されていたタブ、またはURLハッシュから復元
   const hash = location.hash.replace("#", "");
@@ -816,11 +880,13 @@ if (configReloadBtn) {
   renderSearchHistoryDatalist();
   await loadPurgeTags();
   await loadBackups();
+  await loadNotificationConfig();
   await loadComfyStatus();
   setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
   await resetGallery();
   startBatchPolling();
 })();
+
 
 
 

@@ -214,6 +214,37 @@
       <p id="backup-status" class="status"></p>
     </section>
 
+    <section id="notification-panel" class="panel">
+      <h2>🔔 Discord通知設定</h2>
+      <p class="hint">生成完了やエラー発生時のDiscord Webhook通知を設定します。</p>
+      <div class="form-row">
+        <label style="flex: 2;">
+          Webhook URL
+          <input type="url" id="notif-webhook-url" placeholder="https://discord.com/api/webhooks/...">
+        </label>
+        <label style="flex: 1;">
+          通知レベル
+          <select id="notif-level">
+            <option value="success">success (成功・エラー時)</option>
+            <option value="error_only">error_only (エラー発生時のみ)</option>
+            <option value="debug">debug (全詳細ログ)</option>
+            <option value="none">none (通知無効)</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="checkbox">
+          <input type="checkbox" id="notif-include-image">
+          🖼️ 生成画像をDiscordに直接添付する (大画面プレビュー)
+        </label>
+      </div>
+      <div class="form-row">
+        <button type="button" id="notif-save-btn">💾 通知設定を保存</button>
+        <button type="button" id="notif-test-btn" class="secondary">🧪 テスト通知を送信</button>
+      </div>
+      <p id="notif-status" class="status"></p>
+    </section>
+
     <section id="system-panel" class="panel">
       <h2>⚙️ システム運用</h2>
       <div class="form-row">
@@ -222,6 +253,7 @@
       <p id="system-status" class="status"></p>
     </section>
   </div>
+
 </main>
 
 <div id="lightbox" class="lightbox hidden">
