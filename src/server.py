@@ -606,13 +606,16 @@ def _batch_fetch_posts(provider: str, query: str, page: int, limit: int, lucky: 
             normalized = []
             for p in posts_list:
                 tags_str = p.get("tags", "")
+                raw_rating = str(p.get("rating", "g")).lower()
+                rating_char = raw_rating[0] if raw_rating else "g"
                 normalized.append({
                     "id": p.get("id"),
+                    "tag_string": tags_str,
                     "tag_string_general": tags_str,
                     "tag_string_character": "",
                     "tag_string_copyright": "",
                     "tag_string_artist": "",
-                    "rating": p.get("rating", "g"),
+                    "rating": rating_char,
                     "_source_site": "gelbooru",
                 })
             return normalized
@@ -723,20 +726,42 @@ def _batch_status_snapshot() -> dict:
 def _batch_worker_loop(cfg: BatchConfig) -> None:
     provider = getattr(cfg, "provider", "danbooru") or "danbooru"
     search = cfg.search
-    if cfg.sort and "order:" not in search:
-        search = f"order:{cfg.sort} {search}".strip()
 
-    if cfg.lucky:
-        # order:randomは母集団全体をソートしタイムアウトしやすいため使わず、random:Nで無作為抽出する
+    if provider == "gelbooru":
+        # Gelbooru用構文: 複数タグ制限がなく、sort:random / sort:score を直接APIに渡せる
+        if cfg.sort and "sort:" not in search and "order:" not in search:
+            search = f"sort:{cfg.sort} {search}".strip()
+
         _order_tag, keyword_tags, ratings, excluded_tags = _tokenize_search_query(search)
-        local_filters = {
-            "required_tags": set(keyword_tags[1:]),
-            "excluded_tags": excluded_tags,
-            "ratings": ratings,
-        }
-        lucky_tags = f"{keyword_tags[0] if keyword_tags else ''} random:{cfg.page_size}".strip()
+        gel_query_parts = list(keyword_tags)
+        for r in ratings:
+            gel_query_parts.append(f"rating:{r}")
+        for ex in excluded_tags:
+            gel_query_parts.append(f"-{ex}")
+
+        if cfg.lucky:
+            if not any(t.startswith("sort:") for t in gel_query_parts):
+                gel_query_parts.append("sort:random")
+
+        api_query = " ".join(gel_query_parts).strip()
+        lucky_tags = api_query
+        local_filters = None
     else:
-        api_query, local_filters = parse_search_query(search)
+        # Danbooru / AIBooru用構文
+        if cfg.sort and "order:" not in search:
+            search = f"order:{cfg.sort} {search}".strip()
+
+        if cfg.lucky:
+            # order:randomは母集団全体をソートしタイムアウトしやすいため使わず、random:Nで無作為抽出する
+            _order_tag, keyword_tags, ratings, excluded_tags = _tokenize_search_query(search)
+            local_filters = {
+                "required_tags": set(keyword_tags[1:]),
+                "excluded_tags": excluded_tags,
+                "ratings": ratings,
+            }
+            lucky_tags = f"{keyword_tags[0] if keyword_tags else ''} random:{cfg.page_size}".strip()
+        else:
+            api_query, local_filters = parse_search_query(search)
 
     seen_keys = _manifest_seen_keys()
     page = 0
@@ -748,7 +773,8 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 break
         try:
             if cfg.lucky:
-                posts = _batch_fetch_posts(provider, lucky_tags, page=1, limit=cfg.page_size, lucky=True)
+                page += 1
+                posts = _batch_fetch_posts(provider, lucky_tags, page=page, limit=cfg.page_size, lucky=True)
             else:
                 page += 1
                 posts = _batch_fetch_posts(provider, api_query, page=page, limit=cfg.page_size, lucky=False)
