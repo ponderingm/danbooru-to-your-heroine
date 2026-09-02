@@ -45,6 +45,7 @@ def reload_config() -> None:
     global MAX_CONSECUTIVE_FAILURES, HEROINES, DEFAULT_HEROINE, SERIES_TAG_KEEP_KEYWORDS
     global OTHER_KNOWN_CHARACTER_TAGS, EXTRA_PURGE_TAGS, GENERATION_BLACKLIST_TAGS
     global QUALITY_TAGS, CHARACTER_IDENTITY_BLACKLIST, BASE_RULES, USER_CONFIG
+    global ART_STYLE_TAGS, ART_STYLE_PRESETS
 
     # 1. ユーザー設定ロード（config.yaml が無ければ config.example.yaml をフォールバック）
     user_path = CONFIG_YAML_PATH if CONFIG_YAML_PATH.exists() else CONFIG_EXAMPLE_YAML_PATH
@@ -116,6 +117,18 @@ def reload_config() -> None:
 
     QUALITY_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("quality_tags", [])}
     CHARACTER_IDENTITY_BLACKLIST = BASE_RULES.get("identity_attributes", {})
+
+    # 6. 画風・媒体カタログ（default_rules.yaml + config.yaml）
+    base_styles = set()
+    for cat_tags in BASE_RULES.get("art_styles", {}).values():
+        if isinstance(cat_tags, list):
+            base_styles.update(t.replace("_", " ").lower() for t in cat_tags)
+    user_styles = {t.replace("_", " ").lower() for t in USER_CONFIG.get("art_styles", [])}
+    ART_STYLE_TAGS = base_styles | user_styles
+
+    base_presets = dict(BASE_RULES.get("art_style_presets", {}))
+    user_presets = dict(USER_CONFIG.get("art_style_presets", {}))
+    ART_STYLE_PRESETS = {**base_presets, **user_presets}
 
 
 

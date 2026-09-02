@@ -181,3 +181,126 @@ identity_attributes:
 # デフォルトで生成自体を拒否（スキップ）するタグ
 default_block_tags:
   - guro
+
+# ─────────────────────────────────────────────
+# 画風・媒体・レンダリング定義（画風オーバーライド・パージ用カタログ）
+# ─────────────────────────────────────────────
+art_styles:
+  # 1. 漫画・モノクロ・線画
+  manga_comic:
+    - comic
+    - manga
+    - 4koma
+    - webcomic
+    - monochrome
+    - greyscale
+    - grayscale
+    - screentone
+    - lineart
+    - clean lineart
+    - rough sketch
+    - sketch
+    - doodle
+    - partially colored
+    - color trace
+
+  # 2. 伝統画材・アナログ調
+  traditional_media:
+    - traditional media
+    - watercolor (medium)
+    - watercolor
+    - oil painting (medium)
+    - oil painting
+    - acrylic paint (medium)
+    - acrylic paint
+    - pastel (medium)
+    - pastel
+    - colored pencil (medium)
+    - colored pencil
+    - crayon (medium)
+    - crayon
+    - marker (medium)
+    - marker
+    - sumi-e
+    - ink (medium)
+    - gouache (medium)
+    - gouache
+
+  # 3. デジタル描画・塗り技法
+  digital_rendering:
+    - cel shading
+    - anime coloring
+    - soft shading
+    - flat color
+    - thick coating
+    - painterly
+    - airbrush (medium)
+    - airbrush
+    - pixel art
+    - vector trace
+
+  # 4. デフォルメ・造形表現
+  stylization:
+    - chibi
+    - super deformed
+    - sd
+    - western cartoon
+    - cartoon
+
+  # 5. 時代・レトロ
+  retro_era:
+    - retro artstyle
+    - 80s (style)
+    - 80s
+    - 90s (style)
+    - 90s
+    - 70s (style)
+    - 70s
+    - anime screencap
+    - dvd screencap
+    - vhs (medium)
+
+  # 6. 特殊造形・3D・クラフト
+  craft_and_3d:
+    - 3d
+    - 3dcg
+    - photorealistic
+    - realistic
+    - claymation
+    - clay figurine
+    - origami
+    - paper cutout
+    - stained glass
+    - embroidery
+
+  # 7. 質感・画面効果
+  textures_and_effects:
+    - halftone
+    - cross-hatching
+    - film grain
+    - chromatic aberration
+
+# プリセット選択時に注入するタグリスト
+art_style_presets:
+  monochrome:
+    - monochrome
+    - greyscale
+    - comic
+    - screentone
+  anime:
+    - cel shading
+    - anime coloring
+  watercolor:
+    - watercolor (medium)
+    - traditional media
+  thick_coating:
+    - thick coating
+    - painterly
+  retro_90s:
+    - retro artstyle
+    - 90s (style)
+    - anime screencap
+  chibi:
+    - chibi
+  pixel_art:
+    - pixel art

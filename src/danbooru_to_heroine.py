@@ -110,42 +110,16 @@ RATING_TAG_MAP = {
     "e": "rating:explicit",
 }
 
-# 🎨 画風・媒体・レンダリングに関する包括的なDanbooruタグカタログ
-ALL_ART_STYLE_TAGS = {
-    # 1. 漫画・モノクロ・線画
-    "comic", "manga", "4koma", "webcomic", "monochrome", "greyscale", "grayscale",
-    "screentone", "lineart", "clean lineart", "rough sketch", "sketch", "doodle",
-    "partially colored", "color trace",
-    # 2. 伝統画材・アナログ調
-    "traditional media", "watercolor (medium)", "watercolor", "oil painting (medium)", "oil painting",
-    "acrylic paint (medium)", "acrylic paint", "pastel (medium)", "pastel",
-    "colored pencil (medium)", "colored pencil", "crayon (medium)", "crayon",
-    "marker (medium)", "marker", "sumi-e", "ink (medium)", "gouache (medium)", "gouache",
-    # 3. デジタル・塗り技法
-    "cel shading", "anime coloring", "soft shading", "flat color", "thick coating",
-    "painterly", "airbrush (medium)", "airbrush", "pixel art", "vector trace",
-    # 4. デフォルメ・キャラクター造形
-    "chibi", "super deformed", "sd", "western cartoon", "cartoon",
-    # 5. 時代・レトロ
-    "retro artstyle", "80s (style)", "80s", "90s (style)", "90s", "70s (style)", "70s",
-    "anime screencap", "dvd screencap", "vhs (medium)",
-    # 6. 特殊造形・3D
-    "3d", "3dcg", "photorealistic", "realistic", "claymation", "clay figurine",
-    "origami", "paper cutout", "stained glass", "embroidery",
-    # 7. テクスチャ・視覚処理
-    "halftone", "cross-hatching", "film grain", "chromatic aberration",
-}
 
-# プリセットごとの注入タグ定義
-ART_STYLE_INJECTIONS = {
-    "monochrome": ["monochrome", "greyscale", "comic", "screentone"],
-    "anime": ["cel shading", "anime coloring"],
-    "watercolor": ["watercolor (medium)", "traditional media"],
-    "thick_coating": ["thick coating", "painterly"],
-    "retro_90s": ["retro artstyle", "90s (style)", "anime screencap"],
-    "chibi": ["chibi"],
-    "pixel_art": ["pixel art"],
-}
+def build_art_style_set() -> set:
+    """config（default_rules.yaml + ユーザー設定）から画風タグ集合を取得する"""
+    return getattr(config, "ART_STYLE_TAGS", set())
+
+
+def get_art_style_presets() -> dict:
+    """config（default_rules.yaml + ユーザー設定）から画風プリセット辞書を取得する"""
+    return getattr(config, "ART_STYLE_PRESETS", {})
+
 
 DANBOORU_API_BASE = "https://danbooru.donmai.us"
 
@@ -356,13 +330,14 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     detected_source_skin = set()
     detected_source_style = set()
     skin_tags_set = {"dark skin", "light skin", "pale skin", "fair skin", "white skin", "tan", "tanned", "sun tan", "one-piece tan"}
+    art_style_set = build_art_style_set()
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:
         tag_norm = tag.replace("_", " ").lower()
 
         # 画風判定（オーバーライドルール: source = 元絵維持, それ以外は元絵画風を全パージして指定画風へ転換）
-        if tag_norm in ALL_ART_STYLE_TAGS:
+        if tag_norm in art_style_set:
             if art_style_mode == "source":
                 situation_tags.append(tag.replace("_", " "))
                 detected_source_style.add(tag_norm)
@@ -433,7 +408,8 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
 
     # 画風オーバーライドによるタグ注入
     if art_style_mode and art_style_mode not in ("source", "default"):
-        injected = ART_STYLE_INJECTIONS.get(art_style_mode)
+        presets = get_art_style_presets()
+        injected = presets.get(art_style_mode)
         if injected:
             situation_tags.extend(injected)
         elif art_style_mode not in ("color", "clean", "none"):
