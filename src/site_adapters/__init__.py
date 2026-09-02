@@ -12,11 +12,12 @@ from .aibooru import AIBooruAdapter
 from .civitai import CivitaiAdapter
 
 ADAPTER_CLASSES = [
-    DanbooruAdapter,
-    GelbooruAdapter,
     AIBooruAdapter,
+    GelbooruAdapter,
     CivitaiAdapter,
+    DanbooruAdapter,
 ]
+
 
 
 def resolve_adapter(url_or_id: str) -> BaseSiteAdapter:

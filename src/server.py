@@ -157,12 +157,12 @@ def _convert(req: ConvertRequest):
     dna, model = _resolve_settings(heroine, req)
 
     try:
-        post_id = extract_post_id(req.url)
-        post = fetch_post(post_id, login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
+        post = fetch_post(req.url, login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except requests.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Danbooru API error: {e}")
+        raise HTTPException(status_code=502, detail=f"API error: {e}")
+
 
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
         post, heroine=heroine, include_artist=req.include_artist, artist_mode=req.artist_mode,

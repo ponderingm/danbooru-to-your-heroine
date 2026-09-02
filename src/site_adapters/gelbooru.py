@@ -16,7 +16,7 @@ class GelbooruAdapter(BaseSiteAdapter):
 
     @classmethod
     def can_handle(cls, url: str) -> bool:
-        return "gelbooru.com" in url
+        return "gelbooru" in url.lower()
 
     @classmethod
     def extract_post_id(cls, url: str) -> str:
@@ -27,7 +27,11 @@ class GelbooruAdapter(BaseSiteAdapter):
         match_slash = re.search(r"/(\d+)(?:[/?#]|$)", url)
         if match_slash:
             return match_slash.group(1)
+        match_digits = re.search(r"(\d+)", url)
+        if match_digits:
+            return match_digits.group(1)
         raise ValueError(f"GelbooruのURLからpost IDを抽出できなかったわ: {url}")
+
 
     def fetch_post(self, post_id: str, **kwargs) -> UnifiedPost:
         url = f"{self.API_ENDPOINT}&id={post_id}"
