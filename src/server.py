@@ -63,7 +63,9 @@ import config
 from danbooru_to_heroine import (
     extract_post_id, fetch_post, mutate_tags_to_heroine, build_prompt,
     build_heroine_negative_prompt, QUALITY_TAGS,
+    mutate_raw_prompt_to_heroine, build_hybrid_prompt,
 )
+
 from model_adapter import adapt_prompt, get_negative_prompt, RATING_TAG_ALIASES
 from comfy_client import (
     COMFYUI_URL, CUSTOM_COMFY_URL, ANIMA_COMFY_URL,
@@ -108,6 +110,9 @@ class ConvertRequest(BaseModel):
     # config.GENERATION_BACKENDSに登録したid（Web UIのプルダウン等で選択）。
     # 指定時はmodel/use_custom/checkpointより優先される
     backend: Optional[str] = None
+    # プロンプトソース: "booru" (デフォルト) / "raw" / "hybrid"
+    prompt_source: Optional[str] = "booru"
+
 
 
 class GenerateRequest(ConvertRequest):
@@ -163,14 +168,47 @@ def _convert(req: ConvertRequest):
     except requests.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"API error: {e}")
 
-
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
         post, heroine=heroine, include_artist=req.include_artist, artist_mode=req.artist_mode,
         custom_artist=req.custom_artist,
     )
     base_prompt = build_prompt(identity_tags, situation_tags)
-    prompt = adapt_prompt(base_prompt, model_type=model)
-    return post, heroine, prompt, model
+    booru_prompt = adapt_prompt(base_prompt, model_type=model)
+
+    raw_prompt_heroine = None
+    hybrid_prompt = None
+    raw_prompt = getattr(post, "raw_prompt", None)
+    if raw_prompt:
+        extra_ignore = (
+            list(getattr(post, "character_tags", []))
+            + list(getattr(post, "copyright_tags", []))
+            + list(getattr(post, "artist_tags", []))
+        )
+        raw_mutated = mutate_raw_prompt_to_heroine(raw_prompt, heroine=heroine, extra_ignore_tags=extra_ignore)
+        raw_prompt_heroine = adapt_prompt(raw_mutated, model_type=model)
+        hybrid_prompt = build_hybrid_prompt(booru_prompt, raw_prompt_heroine)
+
+
+    psource = getattr(req, "prompt_source", "booru") or "booru"
+    if psource == "raw" and raw_prompt_heroine:
+        selected_prompt = raw_prompt_heroine
+    elif psource == "hybrid" and hybrid_prompt:
+        selected_prompt = hybrid_prompt
+    else:
+        selected_prompt = booru_prompt
+
+    detected_model = (post.generation_meta or {}).get("detected_model", "") if isinstance(post, UnifiedPost) else ""
+
+    extras = {
+        "booru_prompt": booru_prompt,
+        "raw_prompt_heroine": raw_prompt_heroine,
+        "hybrid_prompt": hybrid_prompt,
+        "has_raw_prompt": bool(raw_prompt),
+        "detected_model": detected_model,
+        "removed_tags": _removed,
+    }
+    return post, heroine, selected_prompt, model, extras
+
 
 
 def _load_manifest() -> list:
@@ -215,10 +253,18 @@ def list_heroines():
 
 @app.post("/convert")
 def convert(req: ConvertRequest):
-    post, heroine, prompt, model = _convert(req)
+    post, heroine, prompt, model, extras = _convert(req)
     pid = post.post_id if isinstance(post, UnifiedPost) else post.get("id")
     site = post.source_site if isinstance(post, UnifiedPost) else "danbooru"
-    return {"post_id": pid, "source_site": site, "original_url": req.url, "heroine": heroine, "model": model, "prompt": prompt}
+    return {
+        "post_id": pid,
+        "source_site": site,
+        "original_url": req.url,
+        "heroine": heroine,
+        "model": model,
+        "prompt": prompt,
+        **extras,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -244,9 +290,10 @@ def _prune_jobs_locked() -> None:
 
 def _do_generate(req: GenerateRequest) -> dict:
     """実際の変換+ComfyUI生成処理本体（旧/generateの同期実装をジョブから呼び出す形に切り出したもの）"""
-    post, heroine, prompt, model = _convert(req)
+    post, heroine, prompt, model, _ = _convert(req)
     if req.prompt_override and req.prompt_override.strip():
         prompt = req.prompt_override.strip()
+
     dna = config.HEROINES[heroine]
 
     negative = build_heroine_negative_prompt(heroine, get_negative_prompt(model_type=model))

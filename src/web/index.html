@@ -50,6 +50,18 @@
         <div class="form-row">
           <button type="button" id="f-preview-btn" class="secondary">🔍 プロンプトプレビュー</button>
         </div>
+        <div id="prompt-source-box" class="source-box hidden">
+          <div class="source-box-header">
+            <span class="source-title">🧬 プロンプト構文ソース切替:</span>
+            <span id="detected-model-badge" class="model-badge"></span>
+          </div>
+          <div class="source-buttons">
+            <button type="button" class="source-btn active" id="btn-source-booru">🏷️ Booruタグ版 (推奨・安定)</button>
+            <button type="button" class="source-btn" id="btn-source-raw">🧪 生メタデータ置換</button>
+            <button type="button" class="source-btn" id="btn-source-hybrid">⚡ ハイブリッド合成</button>
+          </div>
+        </div>
+
         <label>
           プロンプト (プレビュー / 編集)
           <textarea id="f-prompt" rows="3" placeholder="プレビュー後に編集可能。空欄なら自動生成プロンプトを使用"></textarea>

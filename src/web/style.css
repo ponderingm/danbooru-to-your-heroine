@@ -490,3 +490,72 @@ button.danger {
   cursor: pointer;
   padding: 4px 10px;
 }
+
+/* プロンプト構文ソース切替ボックス */
+.source-box {
+  background: #14151f;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-box.hidden {
+  display: none;
+}
+
+.source-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.source-title {
+  font-weight: bold;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.model-badge {
+  background: #252839;
+  color: #79ffe1;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+
+.source-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.source-btn {
+  background: #1e202e;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.source-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.source-btn.active {
+  background: var(--accent);
+  color: #1a1a1a;
+  font-weight: bold;
+  border-color: var(--accent);
+}
+

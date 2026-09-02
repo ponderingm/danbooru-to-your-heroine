@@ -294,6 +294,33 @@ async function callGenerate(payload, statusEl) {
   }
 }
 
+let currentPreviewData = null;
+
+const sourceBox = document.getElementById("prompt-source-box");
+const detectedBadge = document.getElementById("detected-model-badge");
+const btnBooru = document.getElementById("btn-source-booru");
+const btnRaw = document.getElementById("btn-source-raw");
+const btnHybrid = document.getElementById("btn-source-hybrid");
+
+function setPromptSource(sourceType) {
+  if (!currentPreviewData) return;
+  [btnBooru, btnRaw, btnHybrid].forEach((b) => b?.classList.remove("active"));
+  if (sourceType === "booru") {
+    btnBooru?.classList.add("active");
+    promptTextarea.value = currentPreviewData.booru_prompt || currentPreviewData.prompt;
+  } else if (sourceType === "raw") {
+    btnRaw?.classList.add("active");
+    promptTextarea.value = currentPreviewData.raw_prompt_heroine || currentPreviewData.prompt;
+  } else if (sourceType === "hybrid") {
+    btnHybrid?.classList.add("active");
+    promptTextarea.value = currentPreviewData.hybrid_prompt || currentPreviewData.prompt;
+  }
+}
+
+btnBooru?.addEventListener("click", () => setPromptSource("booru"));
+btnRaw?.addEventListener("click", () => setPromptSource("raw"));
+btnHybrid?.addEventListener("click", () => setPromptSource("hybrid"));
+
 previewBtn.addEventListener("click", async () => {
   const url = urlInput.value.trim();
   if (!url) {
@@ -319,14 +346,37 @@ previewBtn.addEventListener("click", async () => {
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
     const data = await res.json();
+    currentPreviewData = data;
     promptTextarea.value = data.prompt;
-    setStatus(formStatus, "プレビュー完了。編集してから生成できる", "ok");
+
+    if (sourceBox) {
+      if (data.has_raw_prompt) {
+        sourceBox.classList.remove("hidden");
+        if (btnRaw) btnRaw.style.display = "";
+        if (btnHybrid) btnHybrid.style.display = "";
+      } else if (data.detected_model) {
+        sourceBox.classList.remove("hidden");
+        if (btnRaw) btnRaw.style.display = "none";
+        if (btnHybrid) btnHybrid.style.display = "none";
+      } else {
+        sourceBox.classList.add("hidden");
+      }
+      if (detectedBadge) {
+        detectedBadge.textContent = data.detected_model ? `🤖 元モデル: ${data.detected_model}` : "";
+        detectedBadge.style.display = data.detected_model ? "" : "none";
+      }
+      [btnBooru, btnRaw, btnHybrid].forEach((b) => b?.classList.remove("active"));
+      btnBooru?.classList.add("active");
+    }
+
+    setStatus(formStatus, "プレビュー完了。構文ソースを選択・編集してから生成できるわよ♪", "ok");
   } catch (err) {
     setStatus(formStatus, `エラー: ${err.message}`, "error");
   } finally {
     previewBtn.disabled = false;
   }
 });
+
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();

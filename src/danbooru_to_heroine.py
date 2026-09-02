@@ -331,6 +331,63 @@ def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list
     return ", ".join(deduped)
 
 
+def mutate_raw_prompt_to_heroine(raw_prompt: str, heroine: str = None, extra_ignore_tags: list = None) -> str:
+    """生プロンプト（メタデータ）のキャラ属性をヒロインDNAに置換し、シチュエーション構文を抽出・再構成する"""
+    if not raw_prompt:
+        return ""
+    if heroine is None:
+        heroine = config.DEFAULT_HEROINE
+    dna = get_heroine_dna(heroine)
+    blacklist = build_blacklist_set()
+    purge_set = build_purge_set()
+    known_character_tags = build_known_character_tags()
+    if extra_ignore_tags:
+        for t in extra_ignore_tags:
+            known_character_tags.add(t.replace("_", " ").lower())
+    negative_tags = {t.replace("_", " ").lower() for t in dna.get("negative_tags", [])}
+
+    cleaned_situation = []
+    seen = set()
+    for part in raw_prompt.split(","):
+        t = part.strip()
+        if not t:
+            continue
+        core = re.sub(r"^[\(\[\{]+|[\)\]\}]+$", "", t)
+        core = re.sub(r":\d+(\.\d+)?$", "", core).strip()
+        norm = core.replace("_", " ").lower()
+
+        if norm in blacklist or norm in purge_set or norm in CENSORING_BLACKLIST:
+            continue
+        if norm in known_character_tags or norm in negative_tags:
+            continue
+        if norm not in seen:
+            cleaned_situation.append(core.replace("_", " "))
+            seen.add(norm)
+
+    identity_tags = dna["identity_tags"] + dna["body_tags"]
+    return build_prompt(identity_tags, cleaned_situation)
+
+
+
+def build_hybrid_prompt(booru_prompt: str, raw_prompt_heroine: str) -> str:
+    """Booruタグから構築したプロンプトと、生プロンプト置換版をマージ（重複排除）してハイブリッド化する"""
+    if not raw_prompt_heroine:
+        return booru_prompt
+    if not booru_prompt:
+        return raw_prompt_heroine
+
+    parts = [p.strip() for p in booru_prompt.split(",") if p.strip()]
+    seen = {p.lower() for p in parts}
+
+    for raw_part in raw_prompt_heroine.split(","):
+        p = raw_part.strip()
+        if p and p.lower() not in seen:
+            parts.append(p)
+            seen.add(p.lower())
+    return ", ".join(parts)
+
+
+
 # ─────────────────────────────────────────────
 # メイン処理
 # ─────────────────────────────────────────────
