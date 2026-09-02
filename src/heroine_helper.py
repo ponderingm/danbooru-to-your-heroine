@@ -55,20 +55,26 @@ def search_and_analyze_heroine(
         for t in tags:
             all_attr_tags[t.replace("_", " ").lower()] = category
 
-    # 1. 身体・外見タグ候補 (body_tags)
+    # 1. 顔（head/face）と身体（body）の分離判定
+    face_categories = {"hair_color", "hair_style", "eye_color", "eye_shape"}
+    body_categories = {"skin", "breasts"}
+
+    face_candidates = []
     body_candidates = []
-    detected_attr_categories = set()
     for tag, count in general_counts.most_common():
         rate = round((count / total_posts) * 100, 1)
         if tag in all_attr_tags:
             cat = all_attr_tags[tag]
-            detected_attr_categories.add(cat)
-            body_candidates.append({
+            item = {
                 "tag": tag,
                 "count": count,
                 "rate": rate,
                 "category": cat,
-            })
+            }
+            if cat in face_categories:
+                face_candidates.append(item)
+            elif cat in body_categories:
+                body_candidates.append(item)
 
     # 2. 作品名候補 (series_tags)
     series_candidates = []
@@ -90,15 +96,15 @@ def search_and_analyze_heroine(
             "rate": rate,
         })
 
-    # 4. 代表衣装・小物候補 (頻度30%以上の一般タグで、身体タグやメタタグ・品質タグでないもの)
+    # 4. 代表衣装・小物候補 (頻度25%以上の一般タグで、身体タグやメタタグ・品質タグでないもの)
     quality_tags = getattr(config, "QUALITY_TAGS", set())
     purge_tags = getattr(config, "EXTRA_PURGE_TAGS", set())
     costume_candidates = []
-    ignored_generals = {"1girl", "solo", "looking at viewer", "blush", "smile", "open mouth", "closed mouth", "standing", "sitting"}
+    ignored_generals = {"1girl", "solo", "looking at viewer", "blush", "smile", "open mouth", "closed mouth", "standing", "sitting", "multiple girls"}
 
     for tag, count in general_counts.most_common(50):
         rate = round((count / total_posts) * 100, 1)
-        if rate < 25.0:
+        if rate < 20.0:
             continue
         if tag in all_attr_tags or tag in quality_tags or tag in purge_tags or tag in ignored_generals:
             continue
@@ -110,7 +116,7 @@ def search_and_analyze_heroine(
 
     # 5. 対立・反意ネガティブタグ候補 (negative_tags)
     negative_candidates = []
-    selected_body_tags = {b["tag"] for b in body_candidates[:8]}
+    selected_body_tags = {b["tag"] for b in body_candidates[:6]}
 
     # 肌色
     if any("dark skin" in b or "tan" in b or "brown skin" in b for b in selected_body_tags):
@@ -123,14 +129,29 @@ def search_and_analyze_heroine(
                 negative_candidates.append({"tag": opp, "reason": "色白肌と対立"})
 
     # 胸
-    if any("small breasts" in b or "flat chest" in b or "petite" in b for b in selected_body_tags):
+    is_small_chest = any("small breasts" in b or "flat chest" in b or "petite" in b for b in selected_body_tags)
+    is_large_chest = any("large breasts" in b or "huge breasts" in b or "big breasts" in b or "gigantic breasts" in b for b in selected_body_tags)
+
+    if is_small_chest:
         for opp in ["large breasts", "huge breasts", "gigantic breasts", "big breasts"]:
             if opp not in selected_body_tags:
                 negative_candidates.append({"tag": opp, "reason": "貧乳・小胸と対立"})
-    elif any("large breasts" in b or "huge breasts" in b or "big breasts" in b for b in selected_body_tags):
+    elif is_large_chest:
         for opp in ["small breasts", "flat chest", "petite"]:
             if opp not in selected_body_tags:
                 negative_candidates.append({"tag": opp, "reason": "巨乳・豊満胸と対立"})
+
+    # 6. オーバーライドルールの初期推奨判定
+    suggested_override_rules = {
+        "skin": "strict",
+        "costume": "source",
+    }
+    if is_small_chest:
+        suggested_override_rules["breasts"] = "strict"    # ユキカゼ等: 小胸は絶対に変化させない絶対遵守
+    elif is_large_chest:
+        suggested_override_rules["breasts"] = "flexible"  # 不知火等: large〜giganticまで柔軟に追従
+    else:
+        suggested_override_rules["breasts"] = "strict"
 
     # キャラクター自身のタグ
     char_display = clean_char.replace("_", " ")
@@ -145,14 +166,19 @@ def search_and_analyze_heroine(
         "search_site": site,
         "total_posts_analyzed": total_posts,
         "suggested_identity_tags": suggested_identity,
+        "suggested_face_tags": [f["tag"] for f in face_candidates[:6]],
+        "suggested_body_tags": [b["tag"] for b in body_candidates[:6]],
+        "suggested_costume_tags": [c["tag"] for c in costume_candidates[:6]],
         "suggested_series_tags": [s["tag"] for s in series_candidates[:2]],
-        "suggested_body_tags": [b["tag"] for b in body_candidates[:8]],
-        "body_candidates": body_candidates[:15],
+        "suggested_override_rules": suggested_override_rules,
+        "face_candidates": face_candidates[:12],
+        "body_candidates": body_candidates[:12],
         "series_candidates": series_candidates,
         "artist_candidates": artist_candidates,
         "costume_candidates": costume_candidates[:12],
         "negative_candidates": negative_candidates,
     }
+
 
 
 def _fetch_character_posts(character: str, search_mode: str, site: str, limit: int) -> List[Dict[str, List[str]]]:

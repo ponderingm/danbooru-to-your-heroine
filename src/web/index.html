@@ -220,20 +220,25 @@
           <p id="helper-status" class="status"></p>
 
           <div id="helper-results" class="helper-results hidden">
+            <!-- 顔・頭部候補 -->
+            <div class="helper-section">
+              <span class="helper-section-title">👤 顔・頭部タグ候補 (髪型・髪色・瞳、クリックで顔タグ欄に追加):</span>
+              <div id="helper-face-chips" class="tag-chips"></div>
+            </div>
             <!-- 身体DNA候補 -->
             <div class="helper-section">
-              <span class="helper-section-title">🧬 身体・外見タグ候補 (クリックで身体タグ欄に追加):</span>
+              <span class="helper-section-title">👙 体型・身体タグ候補 (肌色・胸・体格、クリックで体型タグ欄に追加):</span>
               <div id="helper-body-chips" class="tag-chips"></div>
+            </div>
+            <!-- 代表衣装候補 -->
+            <div class="helper-section">
+              <span class="helper-section-title">👗 代表衣装・アクセサリ候補 (クリックで衣装タグ欄に追加):</span>
+              <div id="helper-costume-chips" class="tag-chips"></div>
             </div>
             <!-- 作品名候補 -->
             <div class="helper-section">
               <span class="helper-section-title">📚 作品名タグ候補 (クリックで作品タグ欄に追加):</span>
               <div id="helper-series-chips" class="tag-chips"></div>
-            </div>
-            <!-- 代表衣装候補 -->
-            <div class="helper-section">
-              <span class="helper-section-title">👗 代表衣装・アクセサリ候補:</span>
-              <div id="helper-costume-chips" class="tag-chips"></div>
             </div>
             <!-- ネガティブ候補 -->
             <div class="helper-section">
@@ -266,10 +271,54 @@
           <textarea id="hm-identity" rows="2" placeholder="mizuki yukikaze, taimanin \(series\)"></textarea>
         </label>
 
+        <!-- 3大カテゴリ分類: 顔・体型・衣装 -->
+        <div class="form-row" style="gap: 12px;">
+          <label style="flex: 1;">
+            👤 顔・頭部タグ (Face/Head: 髪型、髪色、瞳の色など)
+            <textarea id="hm-face" rows="3" placeholder="very long hair, twintails, brown hair, pink eyes"></textarea>
+          </label>
+          <label style="flex: 1;">
+            👙 体型・身体タグ (Body: 肌色、胸サイズ、くびれなど)
+            <textarea id="hm-body" rows="3" placeholder="dark skin, one-piece tan, small breasts, slender, slim waist"></textarea>
+          </label>
+        </div>
+
         <label>
-          身体特徴タグ (肌色、胸サイズ、髪型、髪色など。カンマまたは改行区切り)
-          <textarea id="hm-body" rows="3" placeholder="dark skin, one-piece tan, small breasts, very long hair, twintails, slender, slim waist"></textarea>
+          👗 代表衣装タグ (Costume: デフォルト衣装やアクセサリ)
+          <textarea id="hm-costume" rows="2" placeholder="taimanin suit, leotard, gloves, thighhighs"></textarea>
         </label>
+
+        <!-- ⚡ オーバーライドルール設定 (絶対遵守 vs 柔軟適応) -->
+        <div style="background: #13151f; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0;">
+          <span style="font-size: 0.85rem; font-weight: bold; color: var(--accent);">⚡ オーバーライドルール設定 (絶対遵守・適応ポリシー)</span>
+          <p class="hint" style="margin-top: 4px; margin-bottom: 10px;">キャラごとの「絶対に崩してはならない属性」と「元絵に合わせて柔軟に受け入れる属性」を個別に指定します。</p>
+          
+          <div class="form-row">
+            <label style="flex: 1;">
+              🍒 胸サイズ制御
+              <select id="hm-rule-breasts">
+                <option value="strict">🔒 絶対遵守 (Strict) - 元絵に関わらずヒロインの胸を強制固定 (ユキカゼ等)</option>
+                <option value="flexible">🌊 柔軟適応 (Flexible) - 元絵の豊満サイズ (large~gigantic) を許容 (不知火等)</option>
+                <option value="source">🎨 元絵維持 (Source) - 元絵の胸サイズタグをそのまま継承</option>
+              </select>
+            </label>
+            <label style="flex: 1;">
+              ☀️ 肌色制御
+              <select id="hm-rule-skin">
+                <option value="strict">🔒 絶対遵守 (Strict) - ヒロインの肌色・日焼けを強制固定</option>
+                <option value="source">🎨 元絵維持 (Source) - 元絵の肌色をそのまま継承</option>
+              </select>
+            </label>
+            <label style="flex: 1;">
+              👗 衣装適用ポリシー
+              <select id="hm-rule-costume">
+                <option value="source">👗 元絵の衣装を着る (Source) - 元絵のシチュ服（着物・ビキニ等）に着替え</option>
+                <option value="heroine">🦸 ヒロイン衣装を強制 (Heroine) - 元絵の服を脱いで代表衣装を着る</option>
+                <option value="mix">✨ ハイブリッド (Mix) - 元絵衣装＋代表衣装アクセサリ</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
         <div class="form-row">
           <label style="flex: 1;">
@@ -293,6 +342,7 @@
         </div>
         <p id="hm-status" class="status"></p>
       </form>
+
     </section>
 
     <section id="purge-panel" class="panel">

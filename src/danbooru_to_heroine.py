@@ -78,6 +78,18 @@ QUALITY_TAGS = {
     "highly detailed", "detailed", "absurdres", "highres", "4k", "8k", "hdr",
 }
 
+BREAST_TAGS = {
+    "flat chest", "small breasts", "medium breasts", "large breasts",
+    "huge breasts", "gigantic breasts", "enormous breasts", "big breasts", "massive breasts", "petite",
+}
+LARGE_BREAST_FAMILY = {
+    "large breasts", "huge breasts", "gigantic breasts", "enormous breasts", "big breasts", "massive breasts",
+}
+SMALL_BREAST_FAMILY = {
+    "flat chest", "small breasts", "petite",
+}
+
+
 # モザイク等の検閲タグ（画像には映らない/生成時に不要なので除去）
 CENSORING_BLACKLIST = {
     "censored", "mosaic censoring", "bar censor",
@@ -275,10 +287,38 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     if rating_tag:
         situation_tags.append(rating_tag)
 
+    override_rules = dna.get("override_rules", {})
+
+    breasts_mode = override_rules.get("breasts", "strict")
+    costume_mode = override_rules.get("costume", "source")
+
+    detected_flexible_breasts = set()
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:
         tag_norm = tag.replace("_", " ").lower()
+
+        # 胸サイズ判定（オーバーライドルール）
+        if tag_norm in BREAST_TAGS:
+            if breasts_mode == "strict":
+                removed_tags.append(tag_norm)
+                continue
+            elif breasts_mode == "flexible":
+                # ヒロイン側の身体タグに豊満系があるか判定
+                heroine_body_all = [t.replace("_", " ").lower() for t in (dna.get("body_tags", []) + dna.get("identity_tags", []))]
+                is_heroine_large = any(b in LARGE_BREAST_FAMILY for b in heroine_body_all)
+                if is_heroine_large and tag_norm in LARGE_BREAST_FAMILY:
+                    # 不知火のように元絵がlarge~giganticならそのまま許容・採用
+                    situation_tags.append(tag.replace("_", " "))
+                    detected_flexible_breasts.add(tag_norm)
+                    continue
+                else:
+                    removed_tags.append(tag_norm)
+                    continue
+            elif breasts_mode == "source":
+                situation_tags.append(tag.replace("_", " "))
+                detected_flexible_breasts.add(tag_norm)
+                continue
 
         if tag_norm in negative_tags:
             removed_tags.append(tag_norm)
@@ -302,8 +342,23 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
 
         situation_tags.append(tag.replace("_", " "))
 
-    identity_tags = dna["identity_tags"] + dna["body_tags"]
+    # ヒロインDNAの組み立て（顔・体・衣装の3大カテゴリ）
+    face_tags = dna.get("face_tags", [])
+    body_tags = list(dna.get("body_tags", []))
+    costume_tags = dna.get("costume_tags", [])
+
+    # もし元絵の胸タグがflexible採用されていた場合、ヒロイン側の胸タグと二重にならないよう除外
+    if detected_flexible_breasts:
+        body_tags = [b for b in body_tags if b.replace("_", " ").lower() not in BREAST_TAGS]
+
+    # 衣装モード判定
+    active_costumes = []
+    if costume_mode in ("heroine", "mix"):
+        active_costumes = costume_tags
+
+    identity_tags = dna.get("identity_tags", []) + face_tags + body_tags + active_costumes
     return identity_tags, situation_tags, removed_tags
+
 
 
 def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list = None) -> str:
