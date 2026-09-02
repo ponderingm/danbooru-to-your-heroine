@@ -8,7 +8,7 @@ danbooru_to_heroine.py と同じロジックでタグを config.py で定義し�
 Usage:
     uv run python src/danbooru_search_batch_generator.py "micro_bikini"
     uv run python src/danbooru_search_batch_generator.py "santa_costume rating:explicit" --limit 30 --pages 2
-    uv run python src/danbooru_search_batch_generator.py "school_uniform" --heroine rinko --model anima --no-nsfw
+    uv run python src/danbooru_search_batch_generator.py "school_uniform" --heroine rinko --backend anima_fast
     uv run python src/danbooru_search_batch_generator.py "rating:explicit" --lucky
     uv run python src/danbooru_search_batch_generator.py "order:score rating:explicit micro_bikini beach 1girl" --limit 10
     uv run python src/danbooru_search_batch_generator.py "order:favcount swimsuit -competition_swimsuit" --all
@@ -29,34 +29,23 @@ import requests
 
 from danbooru_to_heroine import (
     DANBOORU_API_BASE, get_heroine_dna, mutate_tags_to_heroine, build_prompt,
+    build_heroine_negative_prompt,
 )
 from model_adapter import adapt_prompt, get_negative_prompt
 from comfy_client import (
-    compute_canvas_size, create_default_workflow, create_custom_workflow, create_anima_workflow,
-    wait_for_comfyui, submit_and_wait,
+    compute_canvas_size, build_workflow_for_backend, wait_for_comfyui, submit_and_wait, resolve_backend,
 )
+from notify import notify_failure
 import config
 
 # src/ の1つ上（リポジトリルート）を基準にする。database/ はsrcの外に置く
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-COMFYUI_URL = config.COMFYUI_API_URL
-# カスタムワークフロー用ComfyUIエンドポイント。設定は config.py を参照
-CUSTOM_COMFY_URL = config.CUSTOM_COMFY_URL
-# Anima v1.0 DiT用ComfyUIエンドポイント。設定は config.py を参照
-ANIMA_COMFY_URL = config.ANIMA_COMFY_URL
 OUTPUT_DIR = config.OUTPUT_DIR
 WEB_OUTPUT_DIR = config.WEB_OUTPUT_DIR
 PROGRESS_PATH = os.path.join(PROJECT_ROOT, "database", "danbooru_search_batch_progress.json")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(WEB_OUTPUT_DIR, exist_ok=True)
-
-
-def resolve_comfy_url(model: str, use_custom: bool) -> str:
-    """model/use_customから使用するComfyUIエンドポイントを決定する（animaはSDXL checkpointを使わないため専用エンドポイント）"""
-    if "anima" in model.lower():
-        return ANIMA_COMFY_URL
-    return CUSTOM_COMFY_URL if use_custom else COMFYUI_URL
 
 
 # ─────────────────────────────────────────────
@@ -213,12 +202,13 @@ def save_progress(progress: dict) -> None:
 # ─────────────────────────────────────────────
 
 def process_post(post: dict, idx: int, total: int, search_slug: str, negative_text: str,
-                  heroine: str, nsfw: bool, include_artist: bool, model: str, checkpoint: str,
+                  heroine: str, include_artist: bool, backend: dict,
                   width: int, height: int, timeout: int, solo_girl_only: bool, auto_canvas: bool,
-                  done_ids: set, progress: dict, use_custom: bool = False,
+                  done_ids: set, progress: dict,
                   skip_realistic: bool = True, local_filters: dict = None, artist_mode: str = None,
+                  custom_artist: str = None,
                   skip_blacklisted: bool = True) -> int:
-    """1件の投稿を判定・変換・生成する。生成した画像枚数を返す（スキップ時は0）"""
+    """1件の投稿を判定・変換・生成する。生成した画像枚数を返す（スキップ時は0、生成失敗時は-1）"""
     post_id = post.get("id")
     if post_id in done_ids:
         print(f"  [{idx}/{total}] post {post_id}: スキップ（生成済み）")
@@ -253,41 +243,36 @@ def process_post(post: dict, idx: int, total: int, search_slug: str, negative_te
         return 0
 
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
-        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist, artist_mode=artist_mode
+        post, heroine=heroine, include_artist=include_artist, artist_mode=artist_mode,
+        custom_artist=custom_artist,
     )
     base_prompt = build_prompt(identity_tags, situation_tags)
-    prompt_text = adapt_prompt(base_prompt, model_type=model, is_h_scene=nsfw)
+    prompt_text = adapt_prompt(base_prompt, model_type=backend["model"])
 
     canvas_size = compute_canvas_size(post.get("image_width"), post.get("image_height")) if auto_canvas else None
     gen_width, gen_height = canvas_size if canvas_size else (width, height)
 
     prefix = f"DanbooruSearch_{search_slug}_{post_id}"
-    mode_label = "anima" if "anima" in model.lower() else ("custom" if use_custom else "default")
-    print(f"  [{idx}/{total}] post {post_id} → 生成中 ({prefix}, {gen_width}x{gen_height}, {mode_label})...")
+    print(f"  [{idx}/{total}] post {post_id} → 生成中 ({prefix}, {gen_width}x{gen_height}, {backend['id']})...")
 
-    if "anima" in model.lower():
-        # Anima v1.0 DiTはSDXL checkpointを使わないため、use_custom/checkpointの指定は無視する
-        wf = create_anima_workflow(
-            prompt_text=prompt_text, negative_text=negative_text,
-            filename_prefix=prefix, width=gen_width, height=gen_height,
-        )
-        saved_files, duration = submit_and_wait(wf, timeout=timeout, base_url=ANIMA_COMFY_URL)
-    elif use_custom:
-        wf = create_custom_workflow(
-            prompt_text=prompt_text, negative_text=negative_text,
-            filename_prefix=prefix, checkpoint=checkpoint, width=gen_width, height=gen_height,
-        )
-        saved_files, duration = submit_and_wait(wf, timeout=timeout, base_url=CUSTOM_COMFY_URL)
-    else:
-        wf = create_default_workflow(
-            prompt_text=prompt_text, negative_text=negative_text,
-            filename_prefix=prefix, checkpoint=checkpoint, width=gen_width, height=gen_height,
-        )
-        saved_files, duration = submit_and_wait(wf, timeout=timeout)
+    wf = build_workflow_for_backend(
+        backend, prompt_text=prompt_text, negative_text=negative_text,
+        filename_prefix=prefix, width=gen_width, height=gen_height,
+    )
+    saved_files, duration = submit_and_wait(wf, timeout=timeout, base_url=backend["comfy_url"])
     if saved_files:
         print(f"    ✨ 保存: {', '.join(saved_files)} ({duration:.1f}s)")
     else:
         print(f"    ⚠️ タイムアウトまたは失敗: post {post_id}")
+        notify_failure(
+            "バッチ生成失敗",
+            f"post {post_id} の生成がタイムアウト/失敗した（ComfyUIが落ちている可能性）。"
+            f"search='{search_slug}' backend={backend['id']}",
+        )
+        done_ids.add(post_id)
+        progress["done_post_ids"] = sorted(done_ids)
+        save_progress(progress)
+        return -1
 
     done_ids.add(post_id)
     progress["done_post_ids"] = sorted(done_ids)
@@ -295,16 +280,22 @@ def process_post(post: dict, idx: int, total: int, search_slug: str, negative_te
     return len(saved_files)
 
 
-def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_artist: bool,
-        model: str, checkpoint: str, width: int, height: int,
+def run(search: str, limit: int, pages: int, heroine: str, include_artist: bool,
+        backend_id: str, checkpoint: str, width: int, height: int,
         login: str, api_key: str, resume: bool, timeout: int, solo_girl_only: bool = True,
-        auto_canvas: bool = True, use_custom: bool = False, skip_realistic: bool = True,
-        until_exhausted: bool = False, artist_mode: str = None, skip_blacklisted: bool = True) -> None:
+        auto_canvas: bool = True, skip_realistic: bool = True,
+        until_exhausted: bool = False, artist_mode: str = None, custom_artist: str = None,
+        skip_blacklisted: bool = True) -> None:
+    backend = resolve_backend(backend_id)
+    if checkpoint:
+        backend = {**backend, "checkpoint": checkpoint}
     progress = load_progress() if resume else {"done_post_ids": []}
     done_ids = set(progress.get("done_post_ids", []))
 
     heroine_name = get_heroine_dna(heroine)["name"]
-    negative_text = get_negative_prompt(model_type=model)
+    negative_text = build_heroine_negative_prompt(
+        heroine, get_negative_prompt(model_type=backend["model"]),
+    )
     search_slug = re.sub(r"[^a-zA-Z0-9]+", "_", search).strip("_")[:30] or "search"
 
     # 匿名利用は1リクエスト最大2タグまでのため、order:+主タグのみAPIに送り、
@@ -312,7 +303,7 @@ def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_a
     api_query, local_filters = parse_search_query(search)
 
     print("==================================================================")
-    print(f" ⚡ Danbooru検索バッチ生成: '{search}' → {heroine_name} ({model}) ⚡")
+    print(f" ⚡ Danbooru検索バッチ生成: '{search}' → {heroine_name} ({backend['label']}) ⚡")
     if api_query != search:
         print(f"   API送信クエリ: '{api_query}'")
         print(f"   手元フィルタ: 必須タグ={sorted(local_filters['required_tags'])} "
@@ -321,7 +312,7 @@ def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_a
         print("   🔁 --all指定: 検索条件に合致する投稿が尽きるまでページを進め続けます（目標枚数・ページ上限なし）")
     print("==================================================================")
 
-    wait_for_comfyui(resolve_comfy_url(model, use_custom))
+    wait_for_comfyui(backend["comfy_url"])
 
     # 手元フィルタで弾かれる投稿が出る分、目標生成枚数(limit*pages)に届くまでページを進め続ける。
     # ただし検索条件が厳しすぎて無限にページを取得し続けないよう安全上限を設ける。
@@ -329,6 +320,8 @@ def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_a
     target_generated = None if until_exhausted else limit * pages
     max_page = None if until_exhausted else max(pages * 20, pages)
     total_generated = 0
+    consecutive_failures = 0
+    max_consecutive_failures = getattr(config, "MAX_CONSECUTIVE_FAILURES", 3)
     page = 0
     while (target_generated is None or total_generated < target_generated) \
             and (max_page is None or page < max_page):
@@ -339,36 +332,60 @@ def run(search: str, limit: int, pages: int, heroine: str, nsfw: bool, include_a
             break
         print(f"\n📄 ページ {page}: {len(posts)}件取得")
 
+        stop = False
         for idx, post in enumerate(posts, 1):
-            total_generated += process_post(
+            result = process_post(
                 post, idx, len(posts), search_slug, negative_text,
-                heroine=heroine, nsfw=nsfw, include_artist=include_artist,
-                model=model, checkpoint=checkpoint, width=width, height=height,
+                heroine=heroine, include_artist=include_artist,
+                backend=backend, width=width, height=height,
                 timeout=timeout, solo_girl_only=solo_girl_only, auto_canvas=auto_canvas,
-                done_ids=done_ids, progress=progress, use_custom=use_custom,
+                done_ids=done_ids, progress=progress,
                 skip_realistic=skip_realistic, local_filters=local_filters, artist_mode=artist_mode,
+                custom_artist=custom_artist,
                 skip_blacklisted=skip_blacklisted,
             )
+            if result == -1:
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    print(f"  ⛔ {consecutive_failures}回連続で生成に失敗したため停止します。")
+                    notify_failure(
+                        "バッチ生成を停止",
+                        f"{consecutive_failures}回連続で生成に失敗したため停止した"
+                        f"（ComfyUIがダウンしている可能性）。search='{search_slug}' backend={backend['id']}",
+                    )
+                    stop = True
+                    break
+            else:
+                consecutive_failures = 0
+                total_generated += result
             if target_generated is not None and total_generated >= target_generated:
                 break
 
+        if stop:
+            break
         if target_generated is None or total_generated < target_generated:
             time.sleep(1)
 
     print(f"\n🎉 完了: {total_generated}枚生成しました。")
 
 
-def run_lucky(search: str, limit: int, heroine: str, nsfw: bool, include_artist: bool,
-              model: str, checkpoint: str, width: int, height: int,
+def run_lucky(search: str, limit: int, heroine: str, include_artist: bool,
+              backend_id: str, checkpoint: str, width: int, height: int,
               login: str, api_key: str, resume: bool, timeout: int, solo_girl_only: bool = True,
-              auto_canvas: bool = True, interval: float = 2.0, use_custom: bool = False,
-              skip_realistic: bool = True, artist_mode: str = None, skip_blacklisted: bool = True) -> None:
+              auto_canvas: bool = True, interval: float = 2.0,
+              skip_realistic: bool = True, artist_mode: str = None, custom_artist: str = None,
+              skip_blacklisted: bool = True) -> None:
     """I'm Feeling Lucky: random:Nで無限に投稿を引き当てて生成し続ける（Ctrl+Cで停止）"""
+    backend = resolve_backend(backend_id)
+    if checkpoint:
+        backend = {**backend, "checkpoint": checkpoint}
     progress = load_progress() if resume else {"done_post_ids": []}
     done_ids = set(progress.get("done_post_ids", []))
 
     heroine_name = get_heroine_dna(heroine)["name"]
-    negative_text = get_negative_prompt(model_type=model)
+    negative_text = build_heroine_negative_prompt(
+        heroine, get_negative_prompt(model_type=backend["model"]),
+    )
     search_slug = re.sub(r"[^a-zA-Z0-9]+", "_", search).strip("_")[:30] or "search"
 
     # order:randomは大きい母集団全体をソートするためタイムアウトしやすいので使わず、
@@ -383,13 +400,15 @@ def run_lucky(search: str, limit: int, heroine: str, nsfw: bool, include_artist:
     lucky_tags = f"{keyword_tags[0] if keyword_tags else ''} random:{limit}".strip()
 
     print("==================================================================")
-    print(f" 🍀 I'M FEELING LUCKY: '{search}' → {heroine_name} ({model}) を無限ループ生成 🍀")
+    print(f" 🍀 I'M FEELING LUCKY: '{search}' → {heroine_name} ({backend['label']}) を無限ループ生成 🍀")
     print("   (Ctrl+C で停止できます。進捗は自動保存されます)")
     print("==================================================================")
 
-    wait_for_comfyui(resolve_comfy_url(model, use_custom))
+    wait_for_comfyui(backend["comfy_url"])
 
     total_generated = 0
+    consecutive_failures = 0
+    max_consecutive_failures = getattr(config, "MAX_CONSECUTIVE_FAILURES", 3)
     round_num = 0
     while True:
         round_num += 1
@@ -409,15 +428,29 @@ def run_lucky(search: str, limit: int, heroine: str, nsfw: bool, include_artist:
         for idx, post in enumerate(posts, 1):
             if post.get("id") not in done_ids:
                 new_in_round += 1
-            total_generated += process_post(
+            result = process_post(
                 post, idx, len(posts), search_slug, negative_text,
-                heroine=heroine, nsfw=nsfw, include_artist=include_artist,
-                model=model, checkpoint=checkpoint, width=width, height=height,
+                heroine=heroine, include_artist=include_artist,
+                backend=backend, width=width, height=height,
                 timeout=timeout, solo_girl_only=solo_girl_only, auto_canvas=auto_canvas,
-                done_ids=done_ids, progress=progress, use_custom=use_custom,
+                done_ids=done_ids, progress=progress,
                 skip_realistic=skip_realistic, local_filters=local_filters, artist_mode=artist_mode,
+                custom_artist=custom_artist,
                 skip_blacklisted=skip_blacklisted,
             )
+            if result == -1:
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    print(f"  ⛔ {consecutive_failures}回連続で生成に失敗したため停止します。")
+                    notify_failure(
+                        "バッチ生成を停止",
+                        f"{consecutive_failures}回連続で生成に失敗したため停止した"
+                        f"（ComfyUIがダウンしている可能性）。search='{search_slug}' backend={backend['id']}",
+                    )
+                    return
+            else:
+                consecutive_failures = 0
+                total_generated += result
 
         if new_in_round == 0:
             time.sleep(interval)
@@ -436,15 +469,18 @@ def main():
                          help="searchにorder:が無い場合に自動付与する並び順（例: score, favcount, rank）")
     parser.add_argument("--heroine", "-H", choices=list(config.HEROINES.keys()), default=config.DEFAULT_HEROINE,
                          help=f"変換先ヒロイン（デフォルト: {config.DEFAULT_HEROINE}）")
-    parser.add_argument("--no-nsfw", action="store_true", help="NSFWタグを除去する")
     parser.add_argument("--include-artist", action="store_true", help="artist:タグをプロンプトに含める")
     parser.add_argument("--artist-mode", choices=["keep", "override", "none"], default=None,
                          help="画風(artistタグ)の扱い: keep=元投稿優先(無ければヒロインのartist_tags) / "
                               "override=常にヒロインのartist_tagsを使う / none=完全除去（省略時は--include-artistから決定）")
-    parser.add_argument("--model", choices=["illustrious", "anima", "animagine"], default="illustrious",
-                         help="生成モデル構文（デフォルト: illustrious）")
-    parser.add_argument("--checkpoint", default=config.DEFAULT_CHECKPOINT,
-                         help="ComfyUIのcheckpointファイル名")
+    parser.add_argument("--custom-artist", default=None,
+                         help="artistタグを自由記述で指定する（指定時は--artist-modeより優先。'artist:'省略可）")
+    parser.add_argument("--backend", choices=list(config.GENERATION_BACKENDS.keys()) or None,
+                         default=getattr(config, "DEFAULT_BACKEND", None),
+                         help="config.GENERATION_BACKENDSに登録したバックエンドid（モデル構文・ComfyUIエンドポイント・LoRA設定をまとめて選択、デフォルト: "
+                              f"{getattr(config, 'DEFAULT_BACKEND', None)}）")
+    parser.add_argument("--checkpoint", default=None,
+                         help="ComfyUIのcheckpointファイル名（省略時は--backendのcheckpoint、それも無ければconfig.DEFAULT_CHECKPOINT）")
     parser.add_argument("--width", type=int, default=832, help="キャンバス幅（--no-auto-canvas指定時、またはDanbooruに元サイズ情報がない場合のフォールバック）")
     parser.add_argument("--height", type=int, default=1216, help="キャンバス高さ（同上）")
     parser.add_argument("--login", default=config.DANBOORU_LOGIN, help="Danbooru ログイン名（任意、config.pyでも設定可）")
@@ -465,8 +501,6 @@ def main():
                          help="I'm Feeling Luckyモード： order:randomで投稿を引き当てながらCtrl+Cで停止するまで無限に生成し続ける（--pagesは無視される）")
     parser.add_argument("--lucky-interval", type=float, default=2.0,
                          help="--lucky使用時、新規投稿が0件だったラウンドの後に待機する秒数（デフォルト、2.0秒）")
-    parser.add_argument("--custom", action="store_true", dest="use_custom",
-                         help=f"デフォルトのComfyUIの代わりにconfig.pyのCUSTOM_COMFY_URL({CUSTOM_COMFY_URL})とCUSTOM_LORA_NAME等のカスタムワークフローで生成する（高速化LoRA運用等を想定）")
 
     args = parser.parse_args()
 
@@ -478,23 +512,25 @@ def main():
         if args.lucky:
             run_lucky(
                 search=search, limit=args.limit,
-                heroine=args.heroine, nsfw=not args.no_nsfw, include_artist=args.include_artist,
-                model=args.model, checkpoint=args.checkpoint, width=args.width, height=args.height,
+                heroine=args.heroine, include_artist=args.include_artist,
+                backend_id=args.backend, checkpoint=args.checkpoint, width=args.width, height=args.height,
                 login=args.login, api_key=args.api_key, resume=not args.no_resume, timeout=args.timeout,
                 solo_girl_only=not args.allow_multi_girl, auto_canvas=not args.no_auto_canvas,
-                interval=args.lucky_interval, use_custom=args.use_custom,
+                interval=args.lucky_interval,
                 skip_realistic=not args.allow_realistic, artist_mode=args.artist_mode,
+                custom_artist=args.custom_artist,
                 skip_blacklisted=not args.allow_blacklisted,
             )
         else:
             run(
                 search=search, limit=args.limit, pages=args.pages,
-                heroine=args.heroine, nsfw=not args.no_nsfw, include_artist=args.include_artist,
-                model=args.model, checkpoint=args.checkpoint, width=args.width, height=args.height,
+                heroine=args.heroine, include_artist=args.include_artist,
+                backend_id=args.backend, checkpoint=args.checkpoint, width=args.width, height=args.height,
                 login=args.login, api_key=args.api_key, resume=not args.no_resume, timeout=args.timeout,
                 solo_girl_only=not args.allow_multi_girl, auto_canvas=not args.no_auto_canvas,
-                use_custom=args.use_custom, skip_realistic=not args.allow_realistic,
+                skip_realistic=not args.allow_realistic,
                 until_exhausted=args.until_exhausted, artist_mode=args.artist_mode,
+                custom_artist=args.custom_artist,
                 skip_blacklisted=not args.allow_blacklisted,
             )
     except requests.HTTPError as e:

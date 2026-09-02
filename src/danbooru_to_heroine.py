@@ -11,7 +11,6 @@ Usage:
     uv run python danbooru_to_heroine.py <danbooru_url>
     uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345
     uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345 --heroine rinko
-    uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345 --no-nsfw
 """
 
 import re
@@ -68,8 +67,8 @@ META_TAG_BLACKLIST = {
     "bad nicoseiga id", "bad tumblr id", "bad source id",
     "translated", "translation request", "partial translation",
     "commentary", "commentary request", "commentary typo", "check commentary", "partial commentary",
-    "personification", "character request", "artist request",
-    "duplicate", "revision", "resized", "non-web source", "third-party edit",
+    "personification", "character request", "artist request","photoshop (medium)"
+    "duplicate", "revision", "resized", "non-web source", "third-party edit","third-party source","english commentary", 
 }
 
 QUALITY_TAGS = {
@@ -79,11 +78,14 @@ QUALITY_TAGS = {
 
 # モザイク等の検閲タグ（画像には映らない/生成時に不要なので除去）
 CENSORING_BLACKLIST = {
-    "censored", "mosaic censoring", "bar censor", "convenient censoring",
+    "censored", "mosaic censoring", "bar censor",
     "character censor", "steam censor", "smoke censor", "light censor",
-    "heart censor", "hair censor", "novelty censor", "shadow censor",
-    "sparkle censor", "soap censor", "water censor", "digital censor",
-    "convenient arm", "unconventional censoring", "uncensored",
+    "heart censor", "novelty censor", "shadow censor",
+    "sparkle censor",
+    "artist name","copyright name","cover", "cover name","content rating","signature",
+    "watermark","cover page","doujin cover",
+    "speech bubble", "thought bubble", "sound effect","colored speech bubble",
+    "character age",
 }
 
 # Danbooruのratingフィールド(g/s/q/e) → Illustrious系モデルが学習済みのratingタグ
@@ -153,12 +155,33 @@ def get_heroine_dna(heroine: str) -> dict:
     return config.HEROINES.get(heroine, config.HEROINES[config.DEFAULT_HEROINE])
 
 
-def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
-                            include_artist: bool = False, artist_mode: str = None):
+def build_heroine_negative_prompt(heroine: str, base_negative: str) -> str:
+    """ヒロイン固有のnegative_tagsと旧default_negative_extraをnegative promptへ追記する。"""
+    dna = get_heroine_dna(heroine)
+    extras = list(dna.get("negative_tags", []))
+    legacy_extra = dna.get("default_negative_extra")
+    if legacy_extra:
+        extras.extend(tag.strip() for tag in legacy_extra.split(","))
+
+    seen = {tag.strip().replace("_", " ").lower() for tag in base_negative.split(",")}
+    parts = [base_negative]
+    for tag in extras:
+        normalized = tag.strip().replace("_", " ").lower()
+        if normalized and normalized not in seen:
+            parts.append(tag.strip())
+            seen.add(normalized)
+    return ", ".join(parts)
+
+
+def mutate_tags_to_heroine(post: dict, heroine: str = None,
+                            include_artist: bool = False, artist_mode: str = None,
+                            custom_artist: str = None):
     """
     artist_mode: "keep"(元投稿のartistタグを使う、無ければdna.artist_tagsへフォールバック) /
                  "override"(元投稿のartistタグは無視し、常にdna.artist_tagsを使う) /
                  "none"(artistタグを完全除去)。省略時はinclude_artistから決める(True→keep, False→none)
+    custom_artist: 指定時はartist_modeより常に優先し、元投稿のartistタグを除去した上でこの文字列を
+                   そのままartistタグとして使う（"artist:"省略時は自動で付与する）
     """
     if heroine is None:
         heroine = config.DEFAULT_HEROINE
@@ -168,6 +191,7 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
     blacklist = build_blacklist_set()
     purge_set = build_purge_set()
     known_character_tags = build_known_character_tags()
+    negative_tags = {t.replace("_", " ").lower() for t in dna.get("negative_tags", [])}
 
     general_tags = set(post.get("tag_string_general", "").split())
     character_tags = set(post.get("tag_string_character", "").split())
@@ -191,8 +215,15 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
         else:
             removed_tags.append(tag.replace("_", " "))
 
-    # アーティストタグ → artist_modeに応じて維持/上書き/無効化する
-    if artist_mode == "override":
+    # アーティストタグ → custom_artist指定時は最優先、以後はartist_modeに応じて維持/上書き/無効化する
+    if custom_artist and custom_artist.strip():
+        for tag in artist_tags:
+            removed_tags.append(f"artist:{tag.replace('_', ' ')}")
+        custom_tag = custom_artist.strip()
+        if not custom_tag.lower().startswith("artist:"):
+            custom_tag = f"artist:{custom_tag}"
+        situation_tags.append(custom_tag)
+    elif artist_mode == "override":
         situation_tags.extend(dna.get("artist_tags", []))
         for tag in artist_tags:
             removed_tags.append(f"artist:{tag.replace('_', ' ')}")
@@ -212,31 +243,27 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
         if tag_norm in META_TAG_BLACKLIST:
             removed_tags.append(tag_norm)
             continue
+        if tag_norm in negative_tags:
+            removed_tags.append(tag_norm)
+            continue
         if tag_norm in purge_set:
             removed_tags.append(tag_norm)
             continue
         situation_tags.append(tag.replace("_", " "))
 
-    # レーティングタグ → post側のrating値をIllustrious系のrating:xタグとして保持
+    # レーティングタグ → post側のrating値をIllustrious系のrating:xタグとしてそのまま保持
     rating_code = post.get("rating")
     rating_tag = RATING_TAG_MAP.get(rating_code)
     if rating_tag:
-        if not nsfw and rating_code in ("q", "e"):
-            situation_tags.append("rating:general")
-        else:
-            situation_tags.append(rating_tag)
-
-    # NSFWキーワード
-    nsfw_keywords = [
-        "sex", "nude", "naked", "nipple", "vagina", "penis", "cum",
-        "ejaculation", "orgasm", "pussy", "erect", "rape", "bondage",
-        "penetration", "anal", "oral", "blowjob", "handjob", "fellatio",
-        "cunnilingus", "masturbat", "tentacle", "gangbang",
-    ]
+        situation_tags.append(rating_tag)
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:
         tag_norm = tag.replace("_", " ").lower()
+
+        if tag_norm in negative_tags:
+            removed_tags.append(tag_norm)
+            continue
 
         if tag_norm in blacklist:
             removed_tags.append(tag_norm)
@@ -251,10 +278,6 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None, nsfw: bool = True,
             continue
 
         if tag_norm in known_character_tags:
-            removed_tags.append(tag_norm)
-            continue
-
-        if not nsfw and any(kw in tag_norm for kw in nsfw_keywords):
             removed_tags.append(tag_norm)
             continue
 
@@ -294,8 +317,9 @@ def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list
 # ─────────────────────────────────────────────
 
 def run(url: str, heroine: str = None, login: str = None,
-        api_key: str = None, nsfw: bool = True, verbose: bool = False,
-        include_artist: bool = False, artist_mode: str = None) -> str:
+        api_key: str = None, verbose: bool = False,
+        include_artist: bool = False, artist_mode: str = None,
+        custom_artist: str = None) -> str:
     if heroine is None:
         heroine = config.DEFAULT_HEROINE
     heroine_name = get_heroine_dna(heroine)["name"]
@@ -325,7 +349,8 @@ def run(url: str, heroine: str = None, login: str = None,
         print(f"\n--- 元 general タグ (先頭400文字) ---\n  {general_preview}...", file=sys.stderr)
 
     identity_tags, situation_tags, removed_tags = mutate_tags_to_heroine(
-        post, heroine=heroine, nsfw=nsfw, include_artist=include_artist, artist_mode=artist_mode
+        post, heroine=heroine, include_artist=include_artist, artist_mode=artist_mode,
+        custom_artist=custom_artist,
     )
 
     if verbose:
@@ -353,11 +378,12 @@ def main():
     )
     parser.add_argument("--login", "-l", default=None, help="Danbooru ログイン名（任意）")
     parser.add_argument("--api-key", "-k", default=None, help="Danbooru API キー（任意）")
-    parser.add_argument("--no-nsfw", action="store_true", help="NSFWタグを除去する")
     parser.add_argument("--include-artist", action="store_true", help="artist:タグをプロンプトに含める（デフォルトは除外。--artist-mode指定時は無視される）")
     parser.add_argument("--artist-mode", choices=["keep", "override", "none"], default=None,
                         help="画風(artistタグ)の扱い: keep=元投稿優先(無ければヒロインのartist_tags) / "
                              "override=常にヒロインのartist_tagsを使う / none=完全除去（省略時は--include-artistから決定）")
+    parser.add_argument("--custom-artist", default=None,
+                        help="artistタグを自由記述で指定する（指定時は--artist-modeより優先。'artist:'省略可）")
     parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログを表示する")
     parser.add_argument("--json", action="store_true", dest="output_json", help="JSON 形式で出力する")
 
@@ -369,10 +395,10 @@ def main():
             heroine=args.heroine,
             login=args.login,
             api_key=args.api_key,
-            nsfw=not args.no_nsfw,
             verbose=args.verbose,
             include_artist=args.include_artist,
             artist_mode=args.artist_mode,
+            custom_artist=args.custom_artist,
         )
 
         if args.output_json:

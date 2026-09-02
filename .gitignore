@@ -1,13 +1,20 @@
-# 個人環境設定（config.example.pyをコピーして作成する）
+# 個人環境設定（config.example.py / config.example.yamlをコピーして作成する）
 src/config.py
+src/config.yaml
 
-# 生成物・進捗ファイル
+# 生成物・進捗・ルールファイル
 database/*.json
+database/*.yaml
 !database/.gitkeep
+
+# ログ・実行ファイル
+nohup.out
+*.log
 
 # Python
 __pycache__/
 *.pyc
 .venv/
 .python-version
+
 

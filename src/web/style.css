@@ -33,6 +33,30 @@ header h1 {
   font-size: 0.9rem;
 }
 
+.comfy-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 0.78rem;
+}
+
+.comfy-dot.online { color: #7f7; }
+.comfy-dot.offline { color: #f77; }
+
+#form textarea,
+.regen-prompt {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #101116;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
 main {
   max-width: 1200px;
   margin: 0 auto;

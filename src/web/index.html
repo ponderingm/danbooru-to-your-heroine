@@ -10,6 +10,7 @@
 <header>
   <h1>danbooru-to-your-heroine</h1>
   <p class="subtitle">生成履歴を確認し、そのまま再生成できるビューア</p>
+  <div id="comfy-status" class="comfy-status"></div>
 </header>
 
 <main>
@@ -26,12 +27,8 @@
           <select id="f-heroine"></select>
         </label>
         <label>
-          モデル
-          <select id="f-model">
-            <option value="illustrious">illustrious</option>
-            <option value="anima">anima</option>
-            <option value="animagine">animagine</option>
-          </select>
+          バックエンド
+          <select id="f-backend"></select>
         </label>
         <label>
           artistタグ
@@ -41,15 +38,18 @@
             <option value="override">ヒロイン固定(override)</option>
           </select>
         </label>
-        <label class="checkbox">
-          <input type="checkbox" id="f-nsfw" checked>
-          NSFW
-        </label>
-        <label class="checkbox">
-          <input type="checkbox" id="f-custom">
-          custom生成
+        <label>
+          artist自由記述（指定時は上の選択より優先）
+          <input type="text" id="f-custom-artist" placeholder="例: wlop（\"artist:\"は省略可）">
         </label>
       </div>
+      <div class="form-row">
+        <button type="button" id="f-preview-btn" class="secondary">プロンプトをプレビュー</button>
+      </div>
+      <label>
+        プロンプト（プレビュー後に編集可。空のままなら自動生成された内容をそのまま使う）
+        <textarea id="f-prompt" rows="3" placeholder="「プロンプトをプレビュー」を押すと変換結果がここに表示される"></textarea>
+      </label>
       <button type="submit" id="f-submit">生成する</button>
     </form>
     <p id="form-status" class="status"></p>
@@ -69,12 +69,8 @@
           <select id="b-heroine"></select>
         </label>
         <label>
-          モデル
-          <select id="b-model">
-            <option value="illustrious">illustrious</option>
-            <option value="anima">anima</option>
-            <option value="animagine">animagine</option>
-          </select>
+          バックエンド
+          <select id="b-backend"></select>
         </label>
         <label>
           artistタグ
@@ -84,13 +80,24 @@
             <option value="override">ヒロイン固定(override)</option>
           </select>
         </label>
-        <label class="checkbox">
-          <input type="checkbox" id="b-nsfw" checked>
-          NSFW
+        <label>
+          artist自由記述（指定時は上の選択より優先）
+          <input type="text" id="b-custom-artist" placeholder="例: wlop（\"artist:\"は省略可）">
         </label>
+        <label>
+          並び順
+          <select id="b-sort">
+            <option value="">新着順（デフォルト）</option>
+            <option value="score">スコア順</option>
+            <option value="favcount">お気に入り数順</option>
+            <option value="rank">ランク順</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
         <label class="checkbox">
-          <input type="checkbox" id="b-custom">
-          custom生成
+          <input type="checkbox" id="b-lucky">
+          🍀 I'm Feeling Lucky（並び順を無視してランダム抽出を無限ループ）
         </label>
       </div>
       <div class="form-row">
@@ -119,7 +126,6 @@
           <option value="">すべて</option>
           <option value="illustrious">illustrious</option>
           <option value="anima">anima</option>
-          <option value="animagine">animagine</option>
         </select>
       </label>
       <label>

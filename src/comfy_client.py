@@ -8,6 +8,9 @@ ComfyUI ワークフロー生成・送信・画像保存ロジック。
            ステップ数・サンプラーを config.py で指定できる（高速化LoRA運用等を想定）
 - anima  : Anima v1.0 DiT向け。SDXLのcheckpointとは別物のUNETLoader/CLIPLoader/VAELoader
            グラフを使う（config.ANIMA_COMFY_URL）
+
+上記3種類のワークフローとComfyUIエンドポイントを名前付きでまとめたものが
+config.GENERATION_BACKENDS。resolve_backend()/build_workflow_for_backend()経由で使う。
 """
 
 import json
@@ -80,14 +83,52 @@ def create_default_workflow(prompt_text: str, negative_text: str, filename_prefi
     }
 
 
+def resolve_backend(backend_id: str = None) -> dict:
+    """config.GENERATION_BACKENDSからbackend_idを引き、生成に必要な設定一式を返す。
+    未指定/未登録ならconfig.DEFAULT_BACKENDにフォールバックする"""
+    backends = getattr(config, "GENERATION_BACKENDS", {})
+    if backend_id not in backends:
+        backend_id = getattr(config, "DEFAULT_BACKEND", None)
+    backend = backends.get(backend_id, {})
+    return {
+        "id": backend_id,
+        "label": backend.get("label", backend_id or ""),
+        "model": backend.get("model", "illustrious"),
+        "workflow": backend.get("workflow", "default"),
+        "comfy_url": backend.get("comfy_url", COMFYUI_URL),
+        "checkpoint": backend.get("checkpoint") or config.DEFAULT_CHECKPOINT,
+        "lora_name": backend.get("lora_name", CUSTOM_LORA_NAME),
+        "steps": backend.get("steps", CUSTOM_STEPS),
+        "cfg": backend.get("cfg", CUSTOM_CFG),
+        "sampler": backend.get("sampler", CUSTOM_SAMPLER),
+        "scheduler": backend.get("scheduler", CUSTOM_SCHEDULER),
+    }
+
+
+def list_backends() -> list:
+    """Web UIのプルダウン等で使う{id,label}の一覧をconfig.GENERATION_BACKENDSの登録順で返す"""
+    backends = getattr(config, "GENERATION_BACKENDS", {})
+    return [{"id": bid, "label": b.get("label", bid)} for bid, b in backends.items()]
+
+
 def create_custom_workflow(prompt_text: str, negative_text: str, filename_prefix: str,
                             checkpoint: str, width: int = 832, height: int = 1216,
-                            seed: int = None, lora_name: str = None) -> dict:
-    """config.pyのCUSTOM_*設定（LoRA・ステップ数・サンプラー等）を使う任意ワークフロー"""
+                            seed: int = None, lora_name: str = None, steps: int = None,
+                            cfg: float = None, sampler: str = None, scheduler: str = None) -> dict:
+    """config.pyのCUSTOM_*設定（LoRA・ステップ数・サンプラー等）を使う任意ワークフロー。
+    各引数はNoneならCUSTOM_*グローバル設定にフォールバックする（GENERATION_PRESETS経由の上書き用）"""
     if seed is None:
         seed = random.randint(100000, 99999999)
     if lora_name is None:
         lora_name = CUSTOM_LORA_NAME
+    if steps is None:
+        steps = CUSTOM_STEPS
+    if cfg is None:
+        cfg = CUSTOM_CFG
+    if sampler is None:
+        sampler = CUSTOM_SAMPLER
+    if scheduler is None:
+        scheduler = CUSTOM_SCHEDULER
     return {
         "1": {"inputs": {"ckpt_name": checkpoint}, "class_type": "CheckpointLoaderSimple"},
         "2": {
@@ -102,8 +143,8 @@ def create_custom_workflow(prompt_text: str, negative_text: str, filename_prefix
         "5": {"inputs": {"text": negative_text, "clip": ["2", 1]}, "class_type": "CLIPTextEncode"},
         "6": {
             "inputs": {
-                "seed": seed, "steps": CUSTOM_STEPS, "cfg": CUSTOM_CFG,
-                "sampler_name": CUSTOM_SAMPLER, "scheduler": CUSTOM_SCHEDULER, "denoise": 1.0,
+                "seed": seed, "steps": steps, "cfg": cfg,
+                "sampler_name": sampler, "scheduler": scheduler, "denoise": 1.0,
                 "model": ["2", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["3", 0],
             },
             "class_type": "KSampler",
@@ -136,6 +177,40 @@ def create_anima_workflow(prompt_text: str, negative_text: str, filename_prefix:
         "8": {"inputs": {"samples": ["7", 0], "vae": ["3", 0]}, "class_type": "VAEDecode"},
         "9": {"inputs": {"filename_prefix": filename_prefix, "images": ["8", 0]}, "class_type": "SaveImage"},
     }
+
+
+def build_workflow_for_backend(backend: dict, prompt_text: str, negative_text: str, filename_prefix: str,
+                                width: int = 832, height: int = 1216, seed: int = None) -> dict:
+    """resolve_backend()の戻り値からworkflow種別(default/custom/anima)に応じたワークフロー辞書を組み立てる
+    （server.py/danbooru_search_batch_generator.py共通のバックエンド分岐ロジック）"""
+    workflow = backend["workflow"]
+    if workflow == "anima":
+        return create_anima_workflow(
+            prompt_text=prompt_text, negative_text=negative_text, filename_prefix=filename_prefix,
+            width=width, height=height, seed=seed,
+        )
+    if workflow == "custom":
+        return create_custom_workflow(
+            prompt_text=prompt_text, negative_text=negative_text, filename_prefix=filename_prefix,
+            checkpoint=backend["checkpoint"], width=width, height=height, seed=seed,
+            lora_name=backend["lora_name"], steps=backend["steps"], cfg=backend["cfg"],
+            sampler=backend["sampler"], scheduler=backend["scheduler"],
+        )
+    return create_default_workflow(
+        prompt_text=prompt_text, negative_text=negative_text, filename_prefix=filename_prefix,
+        checkpoint=backend["checkpoint"], width=width, height=height, seed=seed,
+    )
+
+
+def check_comfy_online(base_url: str, timeout: float = 3) -> bool:
+    """ComfyUIサーバーの生存確認（単発リクエストのみ、wait_for_comfyuiと違いリトライ待機はしない）"""
+    try:
+        req = urllib.request.Request(f"{base_url}/system_stats")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            json.loads(resp.read().decode("utf-8"))
+        return True
+    except Exception:
+        return False
 
 
 def wait_for_comfyui(base_url: str = COMFYUI_URL) -> None:
@@ -176,7 +251,9 @@ def submit_and_wait(workflow: dict, timeout: int = 180, base_url: str = COMFYUI_
                         dest_path = os.path.join(OUTPUT_DIR, fn)
                         web_dest_path = os.path.join(WEB_OUTPUT_DIR, fn)
                         urllib.request.urlretrieve(img_url, dest_path)
-                        shutil.copyfile(dest_path, web_dest_path)
+                        # OUTPUT_DIR/WEB_OUTPUT_DIRが同一パスの場合、copyfileだとSameFileErrorになるため回避
+                        if os.path.abspath(dest_path) != os.path.abspath(web_dest_path):
+                            shutil.copyfile(dest_path, web_dest_path)
                         saved_files.append(fn)
                 if saved_files:
                     return saved_files, time.time() - start_t

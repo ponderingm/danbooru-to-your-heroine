@@ -28,7 +28,7 @@ Danbooruの投稿を検索し、タグを自分のオリジナルヒロインに
 
 - [src/danbooru_to_heroine.py](../src/danbooru_to_heroine.py): 単一投稿URLの変換CLI
 - [src/danbooru_search_batch_generator.py](../src/danbooru_search_batch_generator.py): 検索結果を連続変換・生成するバッチCLI
-- [src/model_adapter.py](../src/model_adapter.py): モデルアーキテクチャ（illustrious / anima / animagine）ごとにプロンプト構文を最適化
+- [src/model_adapter.py](../src/model_adapter.py): モデルアーキテクチャ（illustrious / anima）ごとにプロンプト構文を最適化
 - [src/comfy_client.py](../src/comfy_client.py): ComfyUIワークフロー生成・送信・ポーリング。default / custom / anima の3系統のワークフローを持つ
 - [src/server.py](../src/server.py): FastAPI経由でTampermonkeyスクリプトやWebビューアから呼び出すためのAPI
 - [tampermonkey/](../tampermonkey/): Danbooru投稿ページに変換・生成ボタンを追加するユーザースクリプト
@@ -39,4 +39,4 @@ Danbooruの投稿を検索し、タグを自分のオリジナルヒロインに
 - Python依存関係は`uv`で管理（`uv sync` / `uv run ...`）。
 - 編集後は`python3 -m py_compile src/*.py`で構文エラーがないか確認する。
 - コメントは日本語で簡潔に。
-- `model`パラメータ（illustrious/anima/animagine）に依存する分岐を追加・変更する場合、`comfy_client.py`・`server.py`・`danbooru_search_batch_generator.py`・`model_adapter.py`の呼び出し箇所全てに一貫して反映されているか確認する（過去に`anima`指定が一部の分岐にしか反映されず実質無視されるバグがあった）。
+- `model`パラメータ（illustrious/anima）に依存する分岐を追加・変更する場合、`comfy_client.py`・`server.py`・`danbooru_search_batch_generator.py`・`model_adapter.py`の呼び出し箇所全てに一貫して反映されているか確認する（過去に文字列部分一致の不具合で`animagine`指定が`anima`分岐に吸われ実質無視されるバグがあった。例：文字列の部分一致判定では長い候補を先に判定すること）。

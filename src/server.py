@@ -60,16 +60,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config
-from danbooru_to_heroine import extract_post_id, fetch_post, mutate_tags_to_heroine, build_prompt, QUALITY_TAGS
+from danbooru_to_heroine import (
+    extract_post_id, fetch_post, mutate_tags_to_heroine, build_prompt,
+    build_heroine_negative_prompt, QUALITY_TAGS,
+)
 from model_adapter import adapt_prompt, get_negative_prompt, RATING_TAG_ALIASES
 from comfy_client import (
     COMFYUI_URL, CUSTOM_COMFY_URL, ANIMA_COMFY_URL,
-    compute_canvas_size, create_default_workflow, create_custom_workflow, create_anima_workflow,
-    submit_and_wait,
+    compute_canvas_size, build_workflow_for_backend, resolve_backend, list_backends,
+    submit_and_wait, check_comfy_online,
 )
 from danbooru_search_batch_generator import (
     parse_search_query, search_posts, matches_local_filters, is_solo_girl, is_realistic_style, is_blacklisted,
+    _tokenize_search_query,
 )
+from notify import notify_failure
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(PROJECT_ROOT, "database", "generated_manifest.json")
@@ -92,11 +97,15 @@ class ConvertRequest(BaseModel):
     url: str
     heroine: Optional[str] = None
     model: Optional[str] = None
-    nsfw: bool = True
     include_artist: bool = False
     # keep=元投稿のartistタグ優先(無ければヒロインのartist_tagsへフォールバック) /
     # override=常にヒロインのartist_tagsを使う / none=完全除去。省略時はinclude_artistから決まる
     artist_mode: Optional[str] = None
+    # 指定時はartist_modeより常に優先し、この文字列をartistタグとしてそのまま使う（"artist:"省略可）
+    custom_artist: Optional[str] = None
+    # config.GENERATION_BACKENDSに登録したid（Web UIのプルダウン等で選択）。
+    # 指定時はmodel/use_custom/checkpointより優先される
+    backend: Optional[str] = None
 
 
 class GenerateRequest(ConvertRequest):
@@ -105,14 +114,38 @@ class GenerateRequest(ConvertRequest):
     height: int = 1216
     use_custom: bool = False
     timeout: int = 180
+    # 指定時は/convertが自動生成するプロンプトの代わりにこの文字列をそのまま使う
+    # （Web UIの「プレビュー→手動編集」フローで使用）
+    prompt_override: Optional[str] = None
 
 
 def _resolve_settings(heroine: str, req: ConvertRequest):
     """ヒロインごとのdefault_model/default_checkpoint/default_negative_extraで
     リクエスト未指定値を補う。リクエストで明示指定された値は常に優先される。"""
     dna = config.HEROINES[heroine]
-    model = req.model or dna.get("default_model") or "illustrious"
+    backend_model = resolve_backend(req.backend)["model"] if req.backend else None
+    model = req.model or backend_model or dna.get("default_model") or "illustrious"
     return dna, model
+
+
+def _resolve_generation_backend(req: GenerateRequest, dna: dict, model: str) -> dict:
+    """generate用の実効バックエンド設定を解決する。req.backend指定時はそれを優先し、
+    未指定時は旧model/use_custom/checkpointパラメータから疑似backendを組み立てる（後方互換）"""
+    if req.backend:
+        backend = resolve_backend(req.backend)
+    else:
+        if "anima" in model.lower():
+            workflow, comfy_url = "anima", ANIMA_COMFY_URL
+        elif req.use_custom:
+            workflow, comfy_url = "custom", CUSTOM_COMFY_URL
+        else:
+            workflow, comfy_url = "default", COMFYUI_URL
+        backend = {
+            "id": None, "label": "", "model": model, "workflow": workflow, "comfy_url": comfy_url,
+            "checkpoint": None, "lora_name": None, "steps": None, "cfg": None, "sampler": None, "scheduler": None,
+        }
+    checkpoint = req.checkpoint or backend["checkpoint"] or dna.get("default_checkpoint") or config.DEFAULT_CHECKPOINT
+    return {**backend, "checkpoint": checkpoint}
 
 
 def _convert(req: ConvertRequest):
@@ -130,10 +163,11 @@ def _convert(req: ConvertRequest):
         raise HTTPException(status_code=502, detail=f"Danbooru API error: {e}")
 
     identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
-        post, heroine=heroine, nsfw=req.nsfw, include_artist=req.include_artist, artist_mode=req.artist_mode,
+        post, heroine=heroine, include_artist=req.include_artist, artist_mode=req.artist_mode,
+        custom_artist=req.custom_artist,
     )
     base_prompt = build_prompt(identity_tags, situation_tags)
-    prompt = adapt_prompt(base_prompt, model_type=model, is_h_scene=req.nsfw)
+    prompt = adapt_prompt(base_prompt, model_type=model)
     return post, heroine, prompt, model
 
 
@@ -207,36 +241,23 @@ def _prune_jobs_locked() -> None:
 def _do_generate(req: GenerateRequest) -> dict:
     """実際の変換+ComfyUI生成処理本体（旧/generateの同期実装をジョブから呼び出す形に切り出したもの）"""
     post, heroine, prompt, model = _convert(req)
+    if req.prompt_override and req.prompt_override.strip():
+        prompt = req.prompt_override.strip()
     dna = config.HEROINES[heroine]
 
-    negative = get_negative_prompt(model_type=model)
-    extra_negative = dna.get("default_negative_extra")
-    if extra_negative:
-        negative = f"{negative}, {extra_negative}"
-    checkpoint = req.checkpoint or dna.get("default_checkpoint") or config.DEFAULT_CHECKPOINT
+    negative = build_heroine_negative_prompt(heroine, get_negative_prompt(model_type=model))
+
+    backend = _resolve_generation_backend(req, dna, model)
+    checkpoint = backend["checkpoint"]
     canvas_size = compute_canvas_size(post.get("image_width"), post.get("image_height"))
     gen_width, gen_height = canvas_size if canvas_size else (req.width, req.height)
     prefix = f"API_{post.get('id')}_{int(time.time())}"
 
-    if "anima" in model.lower():
-        # Anima v1.0 DiTはSDXL checkpointを使わないため、use_custom/checkpointの指定は無視する
-        wf = create_anima_workflow(
-            prompt_text=prompt, negative_text=negative, filename_prefix=prefix,
-            width=gen_width, height=gen_height,
-        )
-        base_url = ANIMA_COMFY_URL
-    elif req.use_custom:
-        wf = create_custom_workflow(
-            prompt_text=prompt, negative_text=negative, filename_prefix=prefix,
-            checkpoint=checkpoint, width=gen_width, height=gen_height,
-        )
-        base_url = CUSTOM_COMFY_URL
-    else:
-        wf = create_default_workflow(
-            prompt_text=prompt, negative_text=negative, filename_prefix=prefix,
-            checkpoint=checkpoint, width=gen_width, height=gen_height,
-        )
-        base_url = COMFYUI_URL
+    wf = build_workflow_for_backend(
+        backend, prompt_text=prompt, negative_text=negative, filename_prefix=prefix,
+        width=gen_width, height=gen_height,
+    )
+    base_url = backend["comfy_url"]
 
     try:
         saved_files, duration = submit_and_wait(wf, timeout=req.timeout, base_url=base_url)
@@ -252,10 +273,10 @@ def _do_generate(req: GenerateRequest) -> dict:
         "heroine": heroine,
         "prompt": prompt,
         "model": model,
-        "nsfw": req.nsfw,
+        "backend": backend["id"],
         "include_artist": req.include_artist,
         "artist_mode": req.artist_mode,
-        "use_custom": req.use_custom,
+        "custom_artist": req.custom_artist,
         "checkpoint": checkpoint,
         "width": gen_width,
         "height": gen_height,
@@ -280,10 +301,12 @@ def _run_generate_job(job_id: str, req: GenerateRequest) -> None:
         with JOBS_LOCK:
             JOBS[job_id]["status"] = "error"
             JOBS[job_id]["error"] = e.detail
+        notify_failure(f"/generate 失敗 (job {job_id})", str(e.detail))
     except Exception as e:
         with JOBS_LOCK:
             JOBS[job_id]["status"] = "error"
             JOBS[job_id]["error"] = str(e)
+        notify_failure(f"/generate 失敗 (job {job_id})", str(e))
 
 
 # 生成は単一ワーカースレッドが優先度付きキューから順に処理する。
@@ -438,9 +461,10 @@ class BatchConfig(BaseModel):
     heroine: Optional[str] = None
     model: Optional[str] = None
     artist_mode: Optional[str] = None
-    nsfw: bool = True
+    custom_artist: Optional[str] = None
     use_custom: bool = False
     checkpoint: Optional[str] = None
+    backend: Optional[str] = None
     width: int = 832
     height: int = 1216
     timeout: int = 180
@@ -449,6 +473,8 @@ class BatchConfig(BaseModel):
     skip_blacklisted: bool = True
     interval_sec: float = 1.0
     page_size: int = 20
+    sort: Optional[str] = None  # searchにorder:が無い場合に自動付与する並び順（例: score, favcount, rank）
+    lucky: bool = False  # I'm Feeling Luckyモード（random:Nで無作為抽出を無限ループ、CLIの--luckyと同等）
 
 
 BATCH_LOCK = threading.Lock()
@@ -472,17 +498,39 @@ def _batch_status_snapshot() -> dict:
 
 
 def _batch_worker_loop(cfg: BatchConfig) -> None:
-    api_query, local_filters = parse_search_query(cfg.search)
+    search = cfg.search
+    if cfg.sort and "order:" not in search:
+        search = f"order:{cfg.sort} {search}".strip()
+
+    if cfg.lucky:
+        # order:randomは母集団全体をソートしタイムアウトしやすいため使わず、random:Nで無作為抽出する
+        # （CLIの--luckyと同じ方式）。主キーワード1個+random:Nのみ送信し、残りは手元で判定する。
+        _order_tag, keyword_tags, ratings, excluded_tags = _tokenize_search_query(search)
+        local_filters = {
+            "required_tags": set(keyword_tags[1:]),
+            "excluded_tags": excluded_tags,
+            "ratings": ratings,
+        }
+        lucky_tags = f"{keyword_tags[0] if keyword_tags else ''} random:{cfg.page_size}".strip()
+    else:
+        api_query, local_filters = parse_search_query(search)
+
     generated_ids = _manifest_post_ids()
     page = 0
+    consecutive_failures = 0
+    max_consecutive_failures = getattr(config, "MAX_CONSECUTIVE_FAILURES", 3)
     while True:
         with BATCH_LOCK:
             if BATCH_STATE["stop_requested"]:
                 break
-        page += 1
         try:
-            posts = search_posts(api_query, limit=cfg.page_size, page=page,
-                                  login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
+            if cfg.lucky:
+                posts = search_posts(lucky_tags, limit=cfg.page_size, page=1,
+                                      login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
+            else:
+                page += 1
+                posts = search_posts(api_query, limit=cfg.page_size, page=page,
+                                      login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
         except Exception as e:
             with BATCH_LOCK:
                 BATCH_STATE["last_error"] = f"検索エラー: {e}"
@@ -490,11 +538,16 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
             continue
 
         if not posts:
-            # 検索条件に合致する投稿を使い切った。新着投稿を待ってページ1からやり直す
-            page = 0
-            time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
+            if cfg.lucky:
+                # ランダム抽出が0件だった（母集団が少ない等）。少し待ってもう一度引き直す
+                time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
+            else:
+                # 検索条件に合致する投稿を使い切った。新着投稿を待ってページ1からやり直す
+                page = 0
+                time.sleep(BATCH_EXHAUSTED_SLEEP_SEC)
             continue
 
+        new_in_round = 0
         for post in posts:
             with BATCH_LOCK:
                 if BATCH_STATE["stop_requested"]:
@@ -506,6 +559,7 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
 
             if post_id in generated_ids:
                 continue
+            new_in_round += 1
             if local_filters and not matches_local_filters(post, local_filters):
                 continue
             if cfg.solo_girl_only and not is_solo_girl(post):
@@ -518,7 +572,8 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
             req = GenerateRequest(
                 url=f"https://danbooru.donmai.us/posts/{post_id}",
                 heroine=cfg.heroine, model=cfg.model, artist_mode=cfg.artist_mode,
-                nsfw=cfg.nsfw, use_custom=cfg.use_custom, checkpoint=cfg.checkpoint,
+                custom_artist=cfg.custom_artist,
+                use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                 width=cfg.width, height=cfg.height, timeout=cfg.timeout,
             )
             job_id = _enqueue_generate_job(req, BATCH_PRIORITY)
@@ -536,9 +591,25 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
             with BATCH_LOCK:
                 if status == "done":
                     BATCH_STATE["total_generated"] += 1
+                    consecutive_failures = 0
                 else:
                     BATCH_STATE["last_error"] = error
+                    consecutive_failures += 1
 
+            if consecutive_failures >= max_consecutive_failures:
+                notify_failure(
+                    "自動バッチ生成を停止",
+                    f"{consecutive_failures}回連続で生成に失敗したため停止した"
+                    f"（ComfyUIがダウンしている可能性）。最後のエラー: {error}",
+                )
+                with BATCH_LOCK:
+                    BATCH_STATE["stop_requested"] = True
+                break
+
+            time.sleep(cfg.interval_sec)
+
+        if cfg.lucky and new_in_round == 0:
+            # 今回のラウンドは全件生成済みだった（母集団が少ない等）。少し待ってから引き直す
             time.sleep(cfg.interval_sec)
 
     with BATCH_LOCK:
@@ -580,6 +651,22 @@ def batch_stop():
 @app.get("/batch/status")
 def batch_status():
     return _batch_status_snapshot()
+
+
+@app.get("/backends")
+def get_backends():
+    """config.GENERATION_BACKENDSの一覧（Web UIのプルダウン用）"""
+    return {"backends": list_backends(), "default": getattr(config, "DEFAULT_BACKEND", None)}
+
+
+@app.get("/comfy/status")
+def comfy_status():
+    """config.GENERATION_BACKENDSの各バックエンドについてComfyUI生存確認（ギャラリーのステータス表示用）"""
+    backends = getattr(config, "GENERATION_BACKENDS", {})
+    return {
+        bid: ("online" if check_comfy_online(b.get("comfy_url", COMFYUI_URL)) else "offline")
+        for bid, b in backends.items()
+    }
 
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")

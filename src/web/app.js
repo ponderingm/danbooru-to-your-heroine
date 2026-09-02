@@ -12,14 +12,16 @@ const RATING_TAG_ALIASES = {
 };
 
 const heroineSelect = document.getElementById("f-heroine");
-const modelSelect = document.getElementById("f-model");
+const backendSelect = document.getElementById("f-backend");
 const artistModeSelect = document.getElementById("f-artist-mode");
+const customArtistInput = document.getElementById("f-custom-artist");
 const urlInput = document.getElementById("f-url");
-const nsfwCheckbox = document.getElementById("f-nsfw");
-const customCheckbox = document.getElementById("f-custom");
 const form = document.getElementById("form");
 const submitBtn = document.getElementById("f-submit");
 const formStatus = document.getElementById("form-status");
+const promptTextarea = document.getElementById("f-prompt");
+const previewBtn = document.getElementById("f-preview-btn");
+const comfyStatusEl = document.getElementById("comfy-status");
 const gallery = document.getElementById("gallery");
 const galleryCount = document.getElementById("gallery-count");
 const reloadBtn = document.getElementById("reload-btn");
@@ -39,10 +41,11 @@ const lightboxClose = document.getElementById("lightbox-close");
 const batchForm = document.getElementById("batch-form");
 const batchSearchInput = document.getElementById("b-search");
 const batchHeroineSelect = document.getElementById("b-heroine");
-const batchModelSelect = document.getElementById("b-model");
+const batchBackendSelect = document.getElementById("b-backend");
 const batchArtistModeSelect = document.getElementById("b-artist-mode");
-const batchNsfwCheckbox = document.getElementById("b-nsfw");
-const batchCustomCheckbox = document.getElementById("b-custom");
+const batchCustomArtistInput = document.getElementById("b-custom-artist");
+const batchSortSelect = document.getElementById("b-sort");
+const batchLuckyCheckbox = document.getElementById("b-lucky");
 const batchStartBtn = document.getElementById("b-start-btn");
 const batchStopBtn = document.getElementById("b-stop-btn");
 const batchStatusEl = document.getElementById("batch-status");
@@ -90,6 +93,36 @@ async function loadHeroines() {
 
 function heroineLabel(key) {
   return heroines[key] ? heroines[key].name : key;
+}
+
+async function loadBackends() {
+  const res = await fetch(`${API_BASE}/backends`);
+  const data = await res.json();
+  const options = data.backends
+    .map(({ id, label }) => `<option value="${id}">${escapeHtml(label)}</option>`)
+    .join("");
+  backendSelect.innerHTML = options;
+  batchBackendSelect.innerHTML = options;
+  if (data.default) {
+    backendSelect.value = data.default;
+    batchBackendSelect.value = data.default;
+  }
+  backendLabels = Object.fromEntries(data.backends.map(({ id, label }) => [id, label]));
+}
+
+const COMFY_STATUS_POLL_MS = 20000;
+let backendLabels = {};
+
+async function loadComfyStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/comfy/status`);
+    const data = await res.json();
+    comfyStatusEl.innerHTML = Object.entries(data)
+      .map(([bid, st]) => `<span class="comfy-dot ${st}">\u25cf ${escapeHtml(backendLabels[bid] || bid)}</span>`)
+      .join("");
+  } catch (err) {
+    comfyStatusEl.innerHTML = `<span class="comfy-dot offline">ComfyUIステータス取得失敗</span>`;
+  }
 }
 
 async function loadTags() {
@@ -171,20 +204,55 @@ async function callGenerate(payload, statusEl) {
   }
 }
 
+previewBtn.addEventListener("click", async () => {
+  const url = urlInput.value.trim();
+  if (!url) {
+    setStatus(formStatus, "投稿URLを入力してください", "error");
+    return;
+  }
+  previewBtn.disabled = true;
+  setStatus(formStatus, "変換中…");
+  try {
+    const res = await fetch(`${API_BASE}/convert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        heroine: heroineSelect.value,
+        backend: backendSelect.value,
+        artist_mode: artistModeSelect.value,
+        custom_artist: customArtistInput.value.trim() || undefined,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    promptTextarea.value = data.prompt;
+    setStatus(formStatus, "プレビュー完了。編集してから生成できる", "ok");
+  } catch (err) {
+    setStatus(formStatus, `エラー: ${err.message}`, "error");
+  } finally {
+    previewBtn.disabled = false;
+  }
+});
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   submitBtn.disabled = true;
   const payload = {
     url: urlInput.value.trim(),
     heroine: heroineSelect.value,
-    model: modelSelect.value,
+    backend: backendSelect.value,
     artist_mode: artistModeSelect.value,
-    nsfw: nsfwCheckbox.checked,
-    use_custom: customCheckbox.checked,
+    custom_artist: customArtistInput.value.trim() || undefined,
+    prompt_override: promptTextarea.value.trim() || undefined,
   };
   try {
     const entry = await callGenerate(payload, formStatus);
     setStatus(formStatus, `完了（${entry.duration_sec}秒） - ヒロイン: ${heroineLabel(entry.heroine)}`, "ok");
+    promptTextarea.value = "";
     await resetGallery();
   } catch (err) {
     setStatus(formStatus, `エラー: ${err.message}`, "error");
@@ -215,10 +283,12 @@ function renderCard(entry) {
     ${img ? `<img src="${img}" loading="lazy" alt="generated">` : ""}
     <div class="card-body">
       <div class="heroine-name">${escapeHtml(heroineLabel(entry.heroine))}</div>
-      <div>post #${entry.post_id} ・ ${escapeHtml(entry.model || "")} ・ ${entry.nsfw ? "NSFW" : "SFW"}${entry.use_custom ? " ・ custom" : ""}</div>
+      <div>post #${entry.post_id} ・ ${escapeHtml(entry.backend || entry.model || "")}</div>
       <button type="button" class="secondary tag-toggle-btn">🏷 使用タグを表示 (${tags.length})</button>
       <div class="prompt hidden"></div>
       <div>${created}</div>
+      <button type="button" class="secondary prompt-edit-toggle-btn">✏️ プロンプトを編集して再生成</button>
+      <textarea class="regen-prompt hidden" rows="3">${escapeHtml(entry.prompt || "")}</textarea>
       <div class="card-actions">
         <a class="secondary" href="${entry.original_url}" target="_blank" rel="noopener">元投稿</a>
         <button type="button" class="regen-btn">🔁 再生成</button>
@@ -248,6 +318,12 @@ function renderCard(entry) {
   const imgEl = card.querySelector("img");
   if (imgEl) imgEl.addEventListener("click", () => openLightbox(img));
 
+  const promptEditToggleBtn = card.querySelector(".prompt-edit-toggle-btn");
+  const regenPromptEl = card.querySelector(".regen-prompt");
+  promptEditToggleBtn.addEventListener("click", () => {
+    regenPromptEl.classList.toggle("hidden");
+  });
+
   const regenBtn = card.querySelector(".regen-btn");
   const regenStatus = card.querySelector(".regen-status");
   regenBtn.addEventListener("click", async () => {
@@ -255,14 +331,16 @@ function renderCard(entry) {
     const payload = {
       url: entry.original_url,
       heroine: entry.heroine,
+      backend: entry.backend,
       model: entry.model,
       artist_mode: entry.artist_mode,
+      custom_artist: entry.custom_artist,
       include_artist: entry.include_artist,
-      nsfw: entry.nsfw,
       use_custom: entry.use_custom,
       checkpoint: entry.checkpoint,
       width: entry.width,
       height: entry.height,
+      prompt_override: regenPromptEl.classList.contains("hidden") ? undefined : regenPromptEl.value.trim(),
     };
     try {
       const newEntry = await callGenerate(payload, regenStatus);
@@ -351,6 +429,8 @@ function renderBatchStatus(status) {
   const cfg = status.config || {};
   const heroineText = cfg.heroine ? heroineLabel(cfg.heroine) : "";
   let text = `稼働中（${heroineText}） 確認${status.total_checked}件 / 生成${status.total_generated}件`;
+  if (cfg.lucky) text += " ・ 🍀lucky";
+  else if (cfg.sort) text += ` ・ 並び順:${cfg.sort}`;
   if (status.current_post_id) text += ` ・ 現在 post #${status.current_post_id}`;
   if (status.last_error) text += ` ・ 直近エラー: ${status.last_error}`;
   setStatus(batchStatusEl, text, status.last_error ? "error" : "ok");
@@ -372,16 +452,21 @@ function startBatchPolling() {
   batchPollTimer = setInterval(refreshBatchStatus, BATCH_STATUS_POLL_MS);
 }
 
+batchLuckyCheckbox.addEventListener("change", () => {
+  batchSortSelect.disabled = batchLuckyCheckbox.checked;
+});
+
 batchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   batchStartBtn.disabled = true;
   const payload = {
     search: batchSearchInput.value.trim(),
     heroine: batchHeroineSelect.value,
-    model: batchModelSelect.value,
+    backend: batchBackendSelect.value,
     artist_mode: batchArtistModeSelect.value,
-    nsfw: batchNsfwCheckbox.checked,
-    use_custom: batchCustomCheckbox.checked,
+    custom_artist: batchCustomArtistInput.value.trim() || undefined,
+    sort: batchSortSelect.value || null,
+    lucky: batchLuckyCheckbox.checked,
   };
   try {
     const status = await fetch(`${API_BASE}/batch/start`, {
@@ -419,6 +504,9 @@ batchStopBtn.addEventListener("click", async () => {
 
 (async function init() {
   await loadHeroines();
+  await loadBackends();
+  await loadComfyStatus();
+  setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
   await resetGallery();
   startBatchPolling();
 })();
