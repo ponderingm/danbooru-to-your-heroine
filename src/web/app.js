@@ -43,6 +43,7 @@ const lightboxClose = document.getElementById("lightbox-close");
 
 const batchForm = document.getElementById("batch-form");
 const batchSearchInput = document.getElementById("b-search");
+const batchProviderSelect = document.getElementById("b-provider");
 const searchHistoryDatalist = document.getElementById("search-history-datalist");
 const batchHeroineSelect = document.getElementById("b-heroine");
 const batchBackendSelect = document.getElementById("b-backend");
@@ -583,7 +584,8 @@ function renderBatchStatus(status) {
   }
   const cfg = status.config || {};
   const heroineText = cfg.heroine ? heroineLabel(cfg.heroine) : "";
-  let text = `稼働中（${heroineText}） 確認${status.total_checked}件 / 生成${status.total_generated}件`;
+  const providerTag = cfg.provider ? `[${cfg.provider.toUpperCase()}] ` : "";
+  let text = `稼働中 ${providerTag}（${heroineText}） 確認${status.total_checked}件 / 生成${status.total_generated}件`;
   if (cfg.lucky) text += " ・ 🍀lucky";
   else if (cfg.sort) text += ` ・ 並び順:${cfg.sort}`;
   if (status.current_post_id) text += ` ・ 現在 post #${status.current_post_id}`;
@@ -621,6 +623,7 @@ batchForm.addEventListener("submit", async (e) => {
   if (batchArtistParams.custom_artist) saveArtistHistory(batchArtistParams.custom_artist);
 
   const payload = {
+    provider: batchProviderSelect ? batchProviderSelect.value : "danbooru",
     search: query,
     heroine: batchHeroineSelect.value,
     backend: batchBackendSelect.value,

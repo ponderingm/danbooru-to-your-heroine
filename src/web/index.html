@@ -107,11 +107,21 @@
     <section id="batch-panel" class="panel">
       <h2>🔄 自動バッチ生成 <span class="help-tip" data-tooltip="検索クエリに合致する投稿を裏で連続生成（重複は自動スキップ）。手動生成が最優先されます">?</span></h2>
       <form id="batch-form">
-        <label>
-          検索クエリ <span class="help-tip" data-tooltip="Booruの検索タグ。履歴から選択するか直接入力してください">?</span>
-          <input type="text" id="b-search" list="search-history-datalist" placeholder="order:score rating:explicit ..." required>
-          <datalist id="search-history-datalist"></datalist>
-        </label>
+        <div class="form-row">
+          <label style="flex: 3;">
+            検索クエリ <span class="help-tip" data-tooltip="Booruの検索タグ。履歴から選択するか直接入力してください">?</span>
+            <input type="text" id="b-search" list="search-history-datalist" placeholder="order:score rating:explicit ..." required>
+            <datalist id="search-history-datalist"></datalist>
+          </label>
+          <label style="flex: 1.2;">
+            プロバイダ <span class="help-tip" data-tooltip="バッチ巡回先のサイト&#10;Danbooru: 安定・高速&#10;Gelbooru: 要APIキー（設定タブで登録）&#10;AIBooru: AI専門Booru">?</span>
+            <select id="b-provider">
+              <option value="danbooru">Danbooru</option>
+              <option value="gelbooru">Gelbooru (要APIキー)</option>
+              <option value="aibooru">AIBooru</option>
+            </select>
+          </label>
+        </div>
         <div class="form-row">
           <label>
             ヒロイン

@@ -51,8 +51,9 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
+import urllib.parse
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -550,6 +551,86 @@ def _manifest_post_ids() -> set:
     return {e["post_id"] for e in _load_manifest() if e.get("post_id") is not None}
 
 
+def _manifest_seen_keys() -> set:
+    """各サイトごとのpost_idまたはURLから、すでに生成済みのキー集合を返す"""
+    keys = set()
+    for e in _load_manifest():
+        pid = e.get("post_id")
+        site = e.get("source_site", "danbooru")
+        if pid is not None:
+            keys.add(f"{site}:{pid}")
+            keys.add(str(pid))
+        if e.get("original_url"):
+            keys.add(e["original_url"])
+    return keys
+
+
+def _batch_fetch_posts(provider: str, query: str, page: int, limit: int, lucky: bool = False) -> list:
+    """指定プロバイダ（danbooru / gelbooru / aibooru）から投稿一覧を取得する"""
+    provider = (provider or "danbooru").lower()
+
+    if provider == "danbooru":
+        return search_posts(query, limit=limit, page=page,
+                            login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
+
+    elif provider == "aibooru":
+        headers = {"User-Agent": "danbooru-to-your-heroine/2.0"}
+        params = {"tags": query, "limit": limit, "page": page}
+        resp = requests.get("https://aibooru.online/posts.json", params=params, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            posts = resp.json()
+            return posts if isinstance(posts, list) else []
+        elif resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+
+    elif provider == "gelbooru":
+        user_id = getattr(config, "GELBOORU_USER_ID", None)
+        api_key = getattr(config, "GELBOORU_API_KEY", None)
+        if not user_id or not api_key:
+            raise ValueError("GelbooruのAPIキーが未設定です。設定タブの「サイト認証」からUser IDとAPI Keyを登録してください")
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        pid = max(0, page - 1)
+        url = f"https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&tags={urllib.parse.quote(query)}&limit={limit}&pid={pid}&user_id={user_id}&api_key={api_key}"
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            posts = data.get("post") if isinstance(data, dict) else data
+            if not posts:
+                return []
+            posts_list = posts if isinstance(posts, list) else [posts]
+            normalized = []
+            for p in posts_list:
+                tags_str = p.get("tags", "")
+                normalized.append({
+                    "id": p.get("id"),
+                    "tag_string_general": tags_str,
+                    "tag_string_character": "",
+                    "tag_string_copyright": "",
+                    "tag_string_artist": "",
+                    "rating": p.get("rating", "g"),
+                    "_source_site": "gelbooru",
+                })
+            return normalized
+        elif resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+
+    else:
+        raise ValueError(f"未対応のプロバイダです: {provider}")
+
+
+def _batch_post_url(provider: str, post_id: Any) -> str:
+    provider = (provider or "danbooru").lower()
+    if provider == "danbooru":
+        return f"https://danbooru.donmai.us/posts/{post_id}"
+    elif provider == "aibooru":
+        return f"https://aibooru.online/posts/{post_id}"
+    elif provider == "gelbooru":
+        return f"https://gelbooru.com/index.php?page=post&s=view&id={post_id}"
+    return f"https://danbooru.donmai.us/posts/{post_id}"
+
+
 def _entry_tags(entry: dict) -> set:
     """エントリのpromptをカンマ区切りタグ集合に分解する（絞り込み・タグ集計用）
     Anima記法のrating語(safe/nsfw等)はIllustrious記法(rating:xxx)にエイリアスし、
@@ -590,6 +671,7 @@ def generated_posts(req: PostIdsRequest):
 # ─────────────────────────────────────────────
 
 class BatchConfig(BaseModel):
+    provider: str = "danbooru"  # "danbooru" | "gelbooru" | "aibooru"
     search: str
     heroine: Optional[str] = None
     model: Optional[str] = None
@@ -634,13 +716,13 @@ def _batch_status_snapshot() -> dict:
 
 
 def _batch_worker_loop(cfg: BatchConfig) -> None:
+    provider = getattr(cfg, "provider", "danbooru") or "danbooru"
     search = cfg.search
     if cfg.sort and "order:" not in search:
         search = f"order:{cfg.sort} {search}".strip()
 
     if cfg.lucky:
         # order:randomは母集団全体をソートしタイムアウトしやすいため使わず、random:Nで無作為抽出する
-        # （CLIの--luckyと同じ方式）。主キーワード1個+random:Nのみ送信し、残りは手元で判定する。
         _order_tag, keyword_tags, ratings, excluded_tags = _tokenize_search_query(search)
         local_filters = {
             "required_tags": set(keyword_tags[1:]),
@@ -651,7 +733,7 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
     else:
         api_query, local_filters = parse_search_query(search)
 
-    generated_ids = _manifest_post_ids()
+    seen_keys = _manifest_seen_keys()
     page = 0
     consecutive_failures = 0
     max_consecutive_failures = getattr(config, "MAX_CONSECUTIVE_FAILURES", 3)
@@ -661,15 +743,13 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 break
         try:
             if cfg.lucky:
-                posts = search_posts(lucky_tags, limit=cfg.page_size, page=1,
-                                      login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
+                posts = _batch_fetch_posts(provider, lucky_tags, page=1, limit=cfg.page_size, lucky=True)
             else:
                 page += 1
-                posts = search_posts(api_query, limit=cfg.page_size, page=page,
-                                      login=config.DANBOORU_LOGIN, api_key=config.DANBOORU_API_KEY)
+                posts = _batch_fetch_posts(provider, api_query, page=page, limit=cfg.page_size, lucky=False)
         except Exception as e:
             with BATCH_LOCK:
-                BATCH_STATE["last_error"] = f"検索エラー: {e}"
+                BATCH_STATE["last_error"] = f"検索エラー ({provider}): {e}"
             time.sleep(10)
             continue
 
@@ -693,7 +773,9 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 BATCH_STATE["current_post_id"] = post_id
                 BATCH_STATE["total_checked"] += 1
 
-            if post_id in generated_ids:
+            post_key = f"{provider}:{post_id}"
+            post_url = _batch_post_url(provider, post_id)
+            if post_key in seen_keys or str(post_id) in seen_keys or post_url in seen_keys:
                 continue
             new_in_round += 1
             if local_filters and not matches_local_filters(post, local_filters):
@@ -706,7 +788,7 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 continue
 
             req = GenerateRequest(
-                url=f"https://danbooru.donmai.us/posts/{post_id}",
+                url=post_url,
                 heroine=cfg.heroine, model=cfg.model, artist_mode=cfg.artist_mode,
                 custom_artist=cfg.custom_artist,
                 override_breasts=cfg.override_breasts,
@@ -726,7 +808,10 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 if status in ("done", "error"):
                     break
 
-            generated_ids.add(post_id)
+            seen_keys.add(post_key)
+            seen_keys.add(str(post_id))
+            seen_keys.add(post_url)
+
             with BATCH_LOCK:
                 if status == "done":
                     BATCH_STATE["total_generated"] += 1
@@ -761,6 +846,14 @@ def batch_start(cfg: BatchConfig):
     heroine = cfg.heroine or config.DEFAULT_HEROINE
     if heroine not in config.HEROINES:
         raise HTTPException(status_code=400, detail=f"unknown heroine: {heroine}")
+
+    if cfg.provider == "gelbooru":
+        if not getattr(config, "GELBOORU_USER_ID", None) or not getattr(config, "GELBOORU_API_KEY", None):
+            raise HTTPException(
+                status_code=400,
+                detail="Gelbooruをプロバイダに指定する場合、設定タブでGelbooru User IDとAPI Keyの登録が必須となります。"
+            )
+
     with BATCH_LOCK:
         if BATCH_STATE["running"]:
             raise HTTPException(status_code=409, detail="batch is already running; call /batch/stop first")
