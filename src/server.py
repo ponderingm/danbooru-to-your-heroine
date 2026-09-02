@@ -74,7 +74,9 @@ from danbooru_search_batch_generator import (
     parse_search_query, search_posts, matches_local_filters, is_solo_girl, is_realistic_style, is_blacklisted,
     _tokenize_search_query,
 )
-from notify import notify_failure
+from notify import notify_failure, notify_success
+from site_adapters import UnifiedPost
+
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(PROJECT_ROOT, "database", "generated_manifest.json")
@@ -214,7 +216,9 @@ def list_heroines():
 @app.post("/convert")
 def convert(req: ConvertRequest):
     post, heroine, prompt, model = _convert(req)
-    return {"post_id": post.get("id"), "original_url": req.url, "heroine": heroine, "model": model, "prompt": prompt}
+    pid = post.post_id if isinstance(post, UnifiedPost) else post.get("id")
+    site = post.source_site if isinstance(post, UnifiedPost) else "danbooru"
+    return {"post_id": pid, "source_site": site, "original_url": req.url, "heroine": heroine, "model": model, "prompt": prompt}
 
 
 # ─────────────────────────────────────────────
@@ -249,9 +253,15 @@ def _do_generate(req: GenerateRequest) -> dict:
 
     backend = _resolve_generation_backend(req, dna, model)
     checkpoint = backend["checkpoint"]
-    canvas_size = compute_canvas_size(post.get("image_width"), post.get("image_height"))
+    
+    post_id = post.post_id if isinstance(post, UnifiedPost) else post.get("id")
+    post_w = post.width if isinstance(post, UnifiedPost) else post.get("image_width")
+    post_h = post.height if isinstance(post, UnifiedPost) else post.get("image_height")
+    source_site = post.source_site if isinstance(post, UnifiedPost) else "danbooru"
+
+    canvas_size = compute_canvas_size(post_w, post_h)
     gen_width, gen_height = canvas_size if canvas_size else (req.width, req.height)
-    prefix = f"API_{post.get('id')}_{int(time.time())}"
+    prefix = f"API_{source_site}_{post_id}_{int(time.time())}"
 
     wf = build_workflow_for_backend(
         backend, prompt_text=prompt, negative_text=negative, filename_prefix=prefix,
@@ -268,7 +278,8 @@ def _do_generate(req: GenerateRequest) -> dict:
         raise HTTPException(status_code=504, detail="ComfyUIの生成がタイムアウトした")
 
     entry = {
-        "post_id": post.get("id"),
+        "post_id": post_id,
+        "source_site": source_site,
         "original_url": req.url,
         "heroine": heroine,
         "prompt": prompt,
@@ -286,7 +297,18 @@ def _do_generate(req: GenerateRequest) -> dict:
     }
     _append_manifest(entry)
 
+    # Discord 成功通知（画像添付つき）
+    first_image_path = os.path.join(config.OUTPUT_DIR, saved_files[0]) if saved_files else None
+    notify_success(
+        heroine=heroine,
+        prompt=prompt,
+        image_path=first_image_path,
+        source_url=req.url,
+        duration_sec=duration,
+    )
+
     return {**entry, "duration_sec": round(duration, 1)}
+
 
 
 def _run_generate_job(job_id: str, req: GenerateRequest) -> None:
@@ -669,7 +691,44 @@ def comfy_status():
     }
 
 
+class PurgeTagsRequest(BaseModel):
+    purge_tags: list[str]
+
+
+@app.get("/purge_tags")
+def get_purge_tags():
+    """Base層・User層・マージ後の全パージタグ一覧を取得"""
+    base_meta = getattr(config, "BASE_RULES", {}).get("meta_purge", [])
+    base_artifact = getattr(config, "BASE_RULES", {}).get("artifact_purge", [])
+    user_purge = getattr(config, "USER_CONFIG", {}).get("purge_tags", [])
+    return {
+        "effective_purge_tags": sorted(list(getattr(config, "EXTRA_PURGE_TAGS", []))),
+        "user_purge_tags": sorted(user_purge),
+        "base_meta_tags": sorted(base_meta),
+        "base_artifact_tags": sorted(base_artifact),
+    }
+
+
+@app.post("/purge_tags")
+def update_purge_tags(req: PurgeTagsRequest):
+    """WebUIからUser層のパージタグを更新し、即座にconfig.yamlへ保存＆ホットリロード"""
+    config.save_user_purge_tags(req.purge_tags)
+    return {
+        "status": "ok",
+        "user_purge_tags": sorted(getattr(config, "USER_CONFIG", {}).get("purge_tags", [])),
+        "total_effective": len(getattr(config, "EXTRA_PURGE_TAGS", [])),
+    }
+
+
+@app.post("/config/reload")
+def trigger_reload_config():
+    """YAML設定とBaseルールを手動でホットリロード"""
+    config.reload_config()
+    return {"status": "ok", "message": "config reloaded successfully"}
+
+
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
 if os.path.isdir(WEB_DIR):
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 

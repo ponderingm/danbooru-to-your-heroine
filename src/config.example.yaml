@@ -1,0 +1,125 @@
+# config.example.yaml
+# ====================
+# 個人環境設定のテンプレート。
+# このファイルをコピーして `src/config.yaml` を作成し、各自の環境に合わせて書き換えてください。
+# `src/config.yaml` は Git 管理外（.gitignore 対象）です。
+#
+#     cp src/config.example.yaml src/config.yaml
+
+# ─────────────────────────────────────────────
+# サーバー・接続設定
+# ─────────────────────────────────────────────
+
+# デフォルトのComfyUIサーバーURL
+comfyui_api_url: "http://127.0.0.1:8188"
+
+# カスタムワークフロー用ComfyUIサーバー（低消費電力機や別ノードなど）
+custom_comfy_url: "http://127.0.0.1:8189"
+custom_lora_name: "your_custom_lora.safetensors"
+custom_steps: 4
+custom_cfg: 1.5
+custom_sampler: "euler"
+custom_scheduler: "sgm_uniform"
+
+# デフォルトcheckpoint
+default_checkpoint: "waiIllustriousSDXL_v160.safetensors"
+
+# Anima v1.0 DiT 設定
+anima_comfy_url: "http://127.0.0.1:8188"
+anima_unet_name: "anima-base-v1.0.safetensors"
+anima_clip_name: "qwen_3_06b_base.safetensors"
+anima_vae_name: "qwen_image_vae.safetensors"
+anima_steps: 28
+anima_cfg: 4.5
+anima_sampler: "euler"
+anima_scheduler: "normal"
+
+# 生成バックエンド一覧
+backends:
+  illustrious_fast:
+    label: "Illustrious（高速機）"
+    model: "illustrious"
+    workflow: "default"
+    comfy_url: "http://127.0.0.1:8188"
+    checkpoint: "waiIllustriousSDXL_v160.safetensors"
+  anima_fast:
+    label: "Anima（高速機）"
+    model: "anima"
+    workflow: "anima"
+    comfy_url: "http://127.0.0.1:8188"
+  illustrious_4step_slow:
+    label: "Illustrious 4-step LoRA（低速機）"
+    model: "illustrious"
+    workflow: "custom"
+    comfy_url: "http://127.0.0.1:8189"
+    checkpoint: "waiIllustriousSDXL_v160.safetensors"
+    lora_name: "your_4step_lora.safetensors"
+    steps: 4
+    cfg: 1.5
+    sampler: "euler"
+    scheduler: "sgm_uniform"
+
+default_backend: "illustrious_fast"
+
+# 生成画像の保存先ディレクトリ
+output_dir: "/path/to/generated_images"
+web_output_dir: "/path/to/generated_images"
+
+# APIサーバー設定
+api_host: "127.0.0.1"
+api_port: 8000
+cors_origins:
+  - "https://danbooru.donmai.us"
+  - "https://gelbooru.com"
+
+# 外部サイト認証（任意、匿名なら null）
+danbooru_login: null
+danbooru_api_key: null
+
+# バッチ停止しきい値
+max_consecutive_failures: 3
+
+# ─────────────────────────────────────────────
+# Discord 通知設定
+# ─────────────────────────────────────────────
+discord:
+  webhook_url: ""
+  notify_level: "success"    # debug | success | error_only | none
+  include_image: true       # 成功通知に生成画像の実体を添付するか
+
+# ─────────────────────────────────────────────
+# ヒロイン定義
+# ─────────────────────────────────────────────
+heroines:
+  example_heroine:
+    name: "サンプルヒロイン"
+    identity_tags:
+      - "example_character_name"
+      - "example_series"
+    body_tags:
+      - "fair skin"
+      - "medium breasts"
+      - "long hair"
+      - "blue eyes"
+    artist_tags: []
+    negative_tags:
+      - "example unwanted tag"
+
+default_heroine: "example_heroine"
+
+# 元投稿の著作権タグのうち保持するキーワード（空なら全著作権タグを除去）
+series_tag_keep_keywords: []
+
+# 未定義の既知キャラクタータグ（混入時は常に除去）
+other_known_character_tags: []
+
+# ─────────────────────────────────────────────
+# ユーザー追加ルール（Base層 default_rules.yaml にマージされる）
+# ─────────────────────────────────────────────
+# プロンプトから削る追加タグ（画像生成は行う）
+purge_tags:
+  - "speech bubble"
+
+# 生成自体を破棄・スキップするタグ（バッチ生成用）
+block_tags:
+  - "guro"

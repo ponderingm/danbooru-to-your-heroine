@@ -50,7 +50,13 @@ const batchStartBtn = document.getElementById("b-start-btn");
 const batchStopBtn = document.getElementById("b-stop-btn");
 const batchStatusEl = document.getElementById("batch-status");
 
+const userPurgeInput = document.getElementById("user-purge-input");
+const purgeSaveBtn = document.getElementById("purge-save-btn");
+const purgeReloadBtn = document.getElementById("purge-reload-btn");
+const purgeInfoEl = document.getElementById("purge-info");
+
 let heroines = {};
+
 let galleryOffset = 0;
 let galleryTotal = 0;
 const selectedTags = new Set();
@@ -502,12 +508,61 @@ batchStopBtn.addEventListener("click", async () => {
   }
 });
 
+async function loadPurgeTags() {
+  try {
+    const res = await fetch(`${API_BASE}/purge_tags`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (userPurgeInput) {
+      userPurgeInput.value = (data.user_purge_tags || []).join(", ");
+    }
+    if (purgeInfoEl) {
+      const baseTotal = (data.base_meta_tags?.length || 0) + (data.base_artifact_tags?.length || 0);
+      const userTotal = data.user_purge_tags?.length || 0;
+      const effTotal = data.effective_purge_tags?.length || 0;
+      purgeInfoEl.textContent = `📊 Base層(公式): ${baseTotal}タグ | User層(独自): ${userTotal}タグ | 有効パージ合計: ${effTotal}タグ`;
+    }
+  } catch (err) {
+    console.error("Failed to load purge tags:", err);
+  }
+}
+
+if (purgeSaveBtn) {
+  purgeSaveBtn.addEventListener("click", async () => {
+    purgeSaveBtn.disabled = true;
+    const rawVal = userPurgeInput.value || "";
+    const tags = rawVal.split(",").map(t => t.trim()).filter(Boolean);
+    try {
+      const res = await fetch(`${API_BASE}/purge_tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purge_tags: tags }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadPurgeTags();
+      setStatus(purgeInfoEl, "✅ パージタグを保存し、即座に反映しました！", "success");
+    } catch (err) {
+      setStatus(purgeInfoEl, `❌ 保存失敗: ${err.message}`, "error");
+    } finally {
+      purgeSaveBtn.disabled = false;
+    }
+  });
+}
+
+if (purgeReloadBtn) {
+  purgeReloadBtn.addEventListener("click", async () => {
+    await loadPurgeTags();
+  });
+}
+
 (async function init() {
   await loadHeroines();
   await loadBackends();
+  await loadPurgeTags();
   await loadComfyStatus();
   setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
   await resetGallery();
   startBatchPolling();
 })();
+
 

@@ -17,9 +17,11 @@ import re
 import sys
 import json
 import argparse
+from typing import Union, Dict, Any
 import requests
 
 import config
+from site_adapters import resolve_adapter, fetch_unified_post, UnifiedPost
 
 # ─────────────────────────────────────────────
 # 除去すべき「元キャラ固有タグ」パターン（属性カテゴリはヒロインに依らず共通）
@@ -103,25 +105,19 @@ DANBOORU_API_BASE = "https://danbooru.donmai.us"
 # Danbooru API
 # ─────────────────────────────────────────────
 
-def extract_post_id(url: str) -> int:
-    match = re.search(r"/posts/(\d+)", url)
-    if match:
-        return int(match.group(1))
-    if url.strip().isdigit():
-        return int(url.strip())
-    raise ValueError(f"DanbooruのURLからpost IDを抽出できなかったわ: {url}")
+def extract_post_id(url: str) -> Union[int, str]:
+    """URLまたはIDからpost IDを抽出する（Danbooru, Gelbooru, AIBooru, Civitai対応）"""
+    adapter = resolve_adapter(url)
+    pid = adapter.extract_post_id(url)
+    return int(pid) if pid.isdigit() else pid
 
 
-def fetch_post(post_id: int, login: str = None, api_key: str = None) -> dict:
-    endpoint = f"{DANBOORU_API_BASE}/posts/{post_id}.json"
-    params = {}
-    if login and api_key:
-        params["login"] = login
-        params["api_key"] = api_key
-    headers = {"User-Agent": "danbooru-to-your-heroine/1.0"}
-    resp = requests.get(endpoint, params=params, headers=headers, timeout=15)
-    resp.raise_for_status()
-    return resp.json()
+def fetch_post(post_id_or_url: Union[int, str], login: str = None, api_key: str = None) -> UnifiedPost:
+    """URLまたはPost IDから統一投稿オブジェクト（UnifiedPost）を取得する"""
+    login = login or getattr(config, "DANBOORU_LOGIN", None)
+    api_key = api_key or getattr(config, "DANBOORU_API_KEY", None)
+    return fetch_unified_post(str(post_id_or_url), login=login, api_key=api_key)
+
 
 
 # ─────────────────────────────────────────────
@@ -130,7 +126,8 @@ def fetch_post(post_id: int, login: str = None, api_key: str = None) -> dict:
 
 def build_blacklist_set() -> set:
     bl = set()
-    for tags in CHARACTER_IDENTITY_BLACKLIST.values():
+    attr_dict = getattr(config, "CHARACTER_IDENTITY_BLACKLIST", CHARACTER_IDENTITY_BLACKLIST)
+    for tags in attr_dict.values():
         for t in tags:
             bl.add(t.lower())
     return bl
@@ -163,8 +160,11 @@ def build_heroine_negative_prompt(heroine: str, base_negative: str) -> str:
     if legacy_extra:
         extras.extend(tag.strip() for tag in legacy_extra.split(","))
 
-    seen = {tag.strip().replace("_", " ").lower() for tag in base_negative.split(",")}
-    parts = [base_negative]
+    if not extras:
+        return base_negative
+
+    parts = [p.strip() for p in base_negative.split(",") if p.strip()]
+    seen = {p.replace("_", " ").lower() for p in parts}
     for tag in extras:
         normalized = tag.strip().replace("_", " ").lower()
         if normalized and normalized not in seen:
@@ -173,7 +173,7 @@ def build_heroine_negative_prompt(heroine: str, base_negative: str) -> str:
     return ", ".join(parts)
 
 
-def mutate_tags_to_heroine(post: dict, heroine: str = None,
+def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                             include_artist: bool = False, artist_mode: str = None,
                             custom_artist: str = None):
     """
@@ -193,11 +193,18 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None,
     known_character_tags = build_known_character_tags()
     negative_tags = {t.replace("_", " ").lower() for t in dna.get("negative_tags", [])}
 
-    general_tags = set(post.get("tag_string_general", "").split())
-    character_tags = set(post.get("tag_string_character", "").split())
-    copyright_tags = set(post.get("tag_string_copyright", "").split())
-    artist_tags = set(post.get("tag_string_artist", "").split())
-    meta_tags = set(post.get("tag_string_meta", "").split())
+    if isinstance(post, UnifiedPost):
+        general_tags = set(post.general_tags or post.all_tags)
+        character_tags = set(post.character_tags)
+        copyright_tags = set(post.copyright_tags)
+        artist_tags = set(post.artist_tags)
+        meta_tags = set(post.meta_tags)
+    else:
+        general_tags = set(post.get("tag_string_general", "").split())
+        character_tags = set(post.get("tag_string_character", "").split())
+        copyright_tags = set(post.get("tag_string_copyright", "").split())
+        artist_tags = set(post.get("tag_string_artist", "").split())
+        meta_tags = set(post.get("tag_string_meta", "").split())
 
     removed_tags = []
     situation_tags = []
@@ -252,10 +259,22 @@ def mutate_tags_to_heroine(post: dict, heroine: str = None,
         situation_tags.append(tag.replace("_", " "))
 
     # レーティングタグ → post側のrating値をIllustrious系のrating:xタグとしてそのまま保持
-    rating_code = post.get("rating")
-    rating_tag = RATING_TAG_MAP.get(rating_code)
+    if isinstance(post, UnifiedPost):
+        raw_r = post.rating.lower()
+        if raw_r.startswith("e"):
+            rating_tag = "rating:explicit"
+        elif raw_r.startswith("q"):
+            rating_tag = "rating:questionable"
+        elif raw_r.startswith("s"):
+            rating_tag = "rating:sensitive"
+        else:
+            rating_tag = "rating:general"
+    else:
+        rating_code = post.get("rating")
+        rating_tag = RATING_TAG_MAP.get(rating_code)
     if rating_tag:
         situation_tags.append(rating_tag)
+
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
     for tag in general_tags:

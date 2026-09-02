@@ -8,18 +8,18 @@
 </head>
 <body>
 <header>
-  <h1>danbooru-to-your-heroine</h1>
-  <p class="subtitle">生成履歴を確認し、そのまま再生成できるビューア</p>
+  <h1>⚡ danbooru-to-your-heroine <span class="version-badge">v2.0</span></h1>
+  <p class="subtitle">Danbooru / Gelbooru / AIBooru / Civitai の構文をヒロインに換装して自動生成</p>
   <div id="comfy-status" class="comfy-status"></div>
 </header>
 
 <main>
   <section id="generate-form" class="panel">
-    <h2>新規生成</h2>
+    <h2>🎨 新規生成</h2>
     <form id="form">
       <label>
-        Danbooru投稿URL
-        <input type="url" id="f-url" placeholder="https://danbooru.donmai.us/posts/12345" required>
+        投稿URL (Danbooru / Gelbooru / AIBooru / Civitai)
+        <input type="url" id="f-url" placeholder="https://danbooru.donmai.us/posts/12345 または gelbooru/aibooru/civitai URL" required>
       </label>
       <div class="form-row">
         <label>
@@ -31,36 +31,52 @@
           <select id="f-backend"></select>
         </label>
         <label>
-          artistタグ
+          Artistタグ
           <select id="f-artist-mode">
-            <option value="none">除去(none)</option>
-            <option value="keep">元投稿優先(keep)</option>
-            <option value="override">ヒロイン固定(override)</option>
+            <option value="none">除去 (none)</option>
+            <option value="keep">元投稿優先 (keep)</option>
+            <option value="override">ヒロイン固定 (override)</option>
           </select>
         </label>
         <label>
-          artist自由記述（指定時は上の選択より優先）
-          <input type="text" id="f-custom-artist" placeholder="例: wlop（\"artist:\"は省略可）">
+          カスタムArtist
+          <input type="text" id="f-custom-artist" placeholder="例: wlop">
         </label>
       </div>
       <div class="form-row">
-        <button type="button" id="f-preview-btn" class="secondary">プロンプトをプレビュー</button>
+        <button type="button" id="f-preview-btn" class="secondary">🔍 プロンプトプレビュー</button>
       </div>
       <label>
-        プロンプト（プレビュー後に編集可。空のままなら自動生成された内容をそのまま使う）
-        <textarea id="f-prompt" rows="3" placeholder="「プロンプトをプレビュー」を押すと変換結果がここに表示される"></textarea>
+        プロンプト (プレビュー / 編集)
+        <textarea id="f-prompt" rows="3" placeholder="プレビュー後に編集可能。空欄なら自動生成プロンプトを使用"></textarea>
       </label>
-      <button type="submit" id="f-submit">生成する</button>
+      <button type="submit" id="f-submit">⚡ 生成する</button>
     </form>
     <p id="form-status" class="status"></p>
   </section>
 
+  <section id="purge-panel" class="panel">
+    <div class="gallery-header">
+      <h2>🛡️ 除外タグ管理 (Purge Tags)</h2>
+      <button type="button" id="purge-reload-btn" class="secondary">🔄 再読込</button>
+    </div>
+    <p class="hint">プロンプトから削るタグ（ノイズ除去・属性衝突防止）。Base層（公式辞書）にUser層（独自設定）が自動マージされます。</p>
+    <div class="form-row">
+      <label style="flex: 1;">
+        User独自パージタグ (カンマ区切りで追加・編集)
+        <input type="text" id="user-purge-input" placeholder="例: speech bubble, 3d, realistic">
+      </label>
+      <button type="button" id="purge-save-btn">💾 保存＆反映</button>
+    </div>
+    <div id="purge-info" class="status"></div>
+  </section>
+
   <section id="batch-panel" class="panel">
-    <h2>自動バッチ生成</h2>
-    <p class="hint">検索条件に合致する投稿を裏で自動生成し続ける（重複はmanifestで自動回避）。手動生成は常にこれより優先される。</p>
+    <h2>⚡ 自動バッチ生成</h2>
+    <p class="hint">検索クエリに合致する投稿を裏で連続生成（重複は自動スキップ）。手動生成が最優先。</p>
     <form id="batch-form">
       <label>
-        Danbooru検索クエリ
+        検索クエリ
         <input type="text" id="b-search" placeholder="order:score rating:explicit micro_bikini" required>
       </label>
       <div class="form-row">
@@ -73,23 +89,23 @@
           <select id="b-backend"></select>
         </label>
         <label>
-          artistタグ
+          Artistタグ
           <select id="b-artist-mode">
-            <option value="none">除去(none)</option>
-            <option value="keep">元投稿優先(keep)</option>
-            <option value="override">ヒロイン固定(override)</option>
+            <option value="none">除去 (none)</option>
+            <option value="keep">元投稿優先 (keep)</option>
+            <option value="override">ヒロイン固定 (override)</option>
           </select>
         </label>
         <label>
-          artist自由記述（指定時は上の選択より優先）
-          <input type="text" id="b-custom-artist" placeholder="例: wlop（\"artist:\"は省略可）">
+          カスタムArtist
+          <input type="text" id="b-custom-artist" placeholder="例: wlop">
         </label>
         <label>
           並び順
           <select id="b-sort">
-            <option value="">新着順（デフォルト）</option>
+            <option value="">新着順 (デフォルト)</option>
             <option value="score">スコア順</option>
-            <option value="favcount">お気に入り数順</option>
+            <option value="favcount">お気に入り順</option>
             <option value="rank">ランク順</option>
           </select>
         </label>
@@ -97,16 +113,17 @@
       <div class="form-row">
         <label class="checkbox">
           <input type="checkbox" id="b-lucky">
-          🍀 I'm Feeling Lucky（並び順を無視してランダム抽出を無限ループ）
+          🍀 I'm Feeling Lucky (ランダム無限ループ)
         </label>
       </div>
       <div class="form-row">
-        <button type="submit" id="b-start-btn">バッチ開始</button>
-        <button type="button" id="b-stop-btn" class="secondary" disabled>停止</button>
+        <button type="submit" id="b-start-btn">▶ バッチ開始</button>
+        <button type="button" id="b-stop-btn" class="secondary" disabled>⏹ 停止</button>
       </div>
     </form>
     <p id="batch-status" class="status"></p>
   </section>
+
 
   <section class="panel">
     <div class="gallery-header">

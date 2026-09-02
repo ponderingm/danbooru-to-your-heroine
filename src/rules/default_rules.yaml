@@ -1,0 +1,143 @@
+# default_rules.yaml
+# ==================
+# 全ユーザー共通の公式Baseルール辞書（Git管理対象）。
+# 画像の品質向上や属性衝突回避のための普遍的なタグ分類リスト。
+# git pull で常に最新の改善が配信される。
+
+# プロンプトから無条件で削るメタタグ（投稿管理用など）
+meta_purge:
+  - bad pixiv id
+  - bad id
+  - bad twitter id
+  - bad deviantart id
+  - bad nicoseiga id
+  - bad tumblr id
+  - bad source id
+  - translated
+  - translation request
+  - partial translation
+  - commentary
+  - commentary request
+  - commentary typo
+  - check commentary
+  - partial commentary
+  - personification
+  - character request
+  - artist request
+  - photoshop (medium)
+  - duplicate
+  - revision
+  - resized
+  - non-web source
+  - third-party edit
+  - third-party source
+  - english commentary
+
+# プロンプトから削る画面ノイズ・検閲・透かしタグ
+artifact_purge:
+  - censored
+  - mosaic censoring
+  - bar censor
+  - character censor
+  - steam censor
+  - smoke censor
+  - light censor
+  - heart censor
+  - novelty censor
+  - shadow censor
+  - sparkle censor
+  - artist name
+  - copyright name
+  - cover
+  - cover name
+  - content rating
+  - signature
+  - watermark
+  - cover page
+  - doujin cover
+  - speech bubble
+  - thought bubble
+  - sound effect
+  - colored speech bubble
+  - character age
+
+# 品質タグ（モデル標準やプロンプト構築時に制御）
+quality_tags:
+  - masterpiece
+  - best quality
+  - high quality
+  - ultra quality
+  - highly detailed
+  - detailed
+  - absurdres
+  - highres
+  - 4k
+  - 8k
+  - hdr
+
+# 元キャラの身体属性（ヒロイン属性と衝突するため置換対象となるタグ分類）
+identity_attributes:
+  hair_color:
+    - blonde hair
+    - brown hair
+    - black hair
+    - blue hair
+    - red hair
+    - green hair
+    - purple hair
+    - pink hair
+    - white hair
+    - silver hair
+    - grey hair
+    - gray hair
+    - light brown hair
+    - dark brown hair
+    - multicolored hair
+    - streaked hair
+    - gradient hair
+  hair_style:
+    - long hair
+    - short hair
+    - medium hair
+    - very long hair
+    - ponytail
+    - twintails
+    - twin tails
+    - braid
+    - braids
+    - side ponytail
+    - double bun
+    - bun
+    - hair bun
+    - bob cut
+    - pixie cut
+    - drill hair
+    - curly hair
+    - wavy hair
+    - straight hair
+    - ahoge
+    - low twintails
+    - high ponytail
+  eye_color:
+    - blue eyes
+    - green eyes
+    - red eyes
+    - purple eyes
+    - brown eyes
+    - golden eyes
+    - yellow eyes
+    - silver eyes
+    - grey eyes
+    - gray eyes
+    - black eyes
+    - heterochromia
+    - pink eyes
+    - aqua eyes
+    - teal eyes
+  eye_shape:
+    - tsurime
+    - tareme
+
+# デフォルトで生成自体を拒否（スキップ）するタグ
+default_block_tags:
+  - guro

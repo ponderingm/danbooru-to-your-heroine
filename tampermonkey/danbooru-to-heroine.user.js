@@ -1,10 +1,13 @@
 // ==UserScript==
 // @name         Danbooru to Heroine
 // @namespace    https://github.com/danbooru-to-your-heroine
-// @version      1.6.0
-// @description  Danbooruの投稿ページ・検索結果一覧にヒロイン化画像生成UIを追加する（生成済みバッジ表示・複数投稿の一括キュー投入・生成キューの進捗パネル・ギャラリー(Webビューア)への遷移リンク・APIサーバーURLの接続案内・config.GENERATION_BACKENDSのバックエンド選択・artistタグの自由記述指定つき）
+// @version      2.0.0
+// @description  Danbooru / Gelbooru / AIBooru / Civitai にヒロイン化画像生成UIを追加する
 // @author       you
 // @match        https://danbooru.donmai.us/posts*
+// @match        https://gelbooru.com/*
+// @match        https://aibooru.online/posts*
+// @match        https://civitai.com/images*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @run-at       document-idle
@@ -13,7 +16,7 @@
 (function () {
   "use strict";
 
-  const DEFAULT_API_BASE = "http://127.0.0.1:8000";
+  const DEFAULT_API_BASE = "http://127.0.0.1:8899";
   const JOB_POLL_INTERVAL_MS = 2000;
   const MAX_QUEUE_ENTRIES = 30;
 
@@ -27,10 +30,13 @@
   let heroines = {};
 
   function canonicalPostUrl(postId) {
-    if (postId) return `https://danbooru.donmai.us/posts/${postId}`;
-    // クエリ・フラグメントを除いた /posts/<id> の形にする
-    return location.href.split("?")[0].split("#")[0];
+    if (postId && location.hostname.includes("danbooru.donmai.us")) {
+      return `https://danbooru.donmai.us/posts/${postId}`;
+    }
+    // クエリ・フラグメントを除いた形にする（Civitai/Gelbooru対応）
+    return location.href.split("#")[0];
   }
+
 
   function heroineLabel(key) {
     return (heroines[key] && heroines[key].name) || key;
