@@ -19,7 +19,16 @@ body {
 }
 
 header {
-  padding: 24px 32px 8px;
+  padding: 24px 32px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 header h1 {
@@ -41,8 +50,46 @@ header h1 {
 
 .subtitle {
   color: var(--text-dim);
-  margin: 4px 0 0;
-  font-size: 0.9rem;
+  margin: 4px 0 12px;
+  font-size: 0.88rem;
+}
+
+.tabs-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tab-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  color: #fff;
+  background: var(--panel);
+  border-bottom: 2px solid #a855f7;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
 }
 
 .status.success {
@@ -50,14 +97,13 @@ header h1 {
   font-weight: 500;
 }
 
-
 .comfy-status {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 8px;
   font-size: 0.78rem;
 }
+
 
 .comfy-dot.online { color: #7f7; }
 .comfy-dot.offline { color: #f77; }

@@ -2,10 +2,12 @@
 src/config.py
 src/config.yaml
 
-# 生成物・進捗・ルールファイル
+# 生成物・進捗・ルール・バックアップファイル
 database/*.json
 database/*.yaml
+database/backups/
 !database/.gitkeep
+
 
 # ログ・実行ファイル
 nohup.out

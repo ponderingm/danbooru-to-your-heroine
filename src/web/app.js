@@ -55,7 +55,34 @@ const purgeSaveBtn = document.getElementById("purge-save-btn");
 const purgeReloadBtn = document.getElementById("purge-reload-btn");
 const purgeInfoEl = document.getElementById("purge-info");
 
+const backupSelect = document.getElementById("backup-select");
+const backupRestoreBtn = document.getElementById("backup-restore-btn");
+const backupStatusEl = document.getElementById("backup-status");
+const configReloadBtn = document.getElementById("config-reload-btn");
+const systemStatusEl = document.getElementById("system-status");
+
+const tabBtns = document.querySelectorAll(".tab-btn");
+const tabPanes = document.querySelectorAll(".tab-pane");
+
+function switchTab(tabName) {
+  tabBtns.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tabName);
+  });
+  tabPanes.forEach(pane => {
+    pane.classList.toggle("active", pane.id === `tab-${tabName}`);
+  });
+  localStorage.setItem("d2h_active_tab", tabName);
+  location.hash = tabName;
+}
+
+tabBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    switchTab(btn.dataset.tab);
+  });
+});
+
 let heroines = {};
+
 
 let galleryOffset = 0;
 let galleryTotal = 0;
@@ -552,17 +579,85 @@ if (purgeSaveBtn) {
 if (purgeReloadBtn) {
   purgeReloadBtn.addEventListener("click", async () => {
     await loadPurgeTags();
+    await loadBackups();
+  });
+}
+
+async function loadBackups() {
+  if (!backupSelect) return;
+  try {
+    const res = await fetch(`${API_BASE}/purge_tags/backups`);
+    if (!res.ok) return;
+    const data = await res.json();
+    backupSelect.innerHTML = "";
+    if (!data.backups || data.backups.length === 0) {
+      backupSelect.innerHTML = '<option value="">バックアップ履歴はありません</option>';
+      if (backupRestoreBtn) backupRestoreBtn.disabled = true;
+      return;
+    }
+    data.backups.forEach(b => {
+      const opt = document.createElement("option");
+      opt.value = b.filename;
+      opt.textContent = `${b.created_at} (${b.tag_count}タグ) - ${b.filename}`;
+      backupSelect.appendChild(opt);
+    });
+    if (backupRestoreBtn) backupRestoreBtn.disabled = false;
+  } catch (err) {
+    console.error("Failed to load backups:", err);
+  }
+}
+
+if (backupRestoreBtn) {
+  backupRestoreBtn.addEventListener("click", async () => {
+    const filename = backupSelect.value;
+    if (!filename) return;
+    if (!confirm(`バックアップ「${filename}」からタグ設定を復元しますか？`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/purge_tags/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadPurgeTags();
+      await loadBackups();
+      setStatus(backupStatusEl, `✅ 「${filename}」から正常に復元しました！`, "success");
+    } catch (err) {
+      setStatus(backupStatusEl, `❌ 復元失敗: ${err.message}`, "error");
+    }
+  });
+}
+
+if (configReloadBtn) {
+  configReloadBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch(`${API_BASE}/config/reload`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadPurgeTags();
+      await loadBackups();
+      setStatus(systemStatusEl, "✅ config.yaml を再読込しました！", "success");
+    } catch (err) {
+      setStatus(systemStatusEl, `❌ リロード失敗: ${err.message}`, "error");
+    }
   });
 }
 
 (async function init() {
+  // 保存されていたタブ、またはURLハッシュから復元
+  const hash = location.hash.replace("#", "");
+  const savedTab = localStorage.getItem("d2h_active_tab");
+  const targetTab = ["generate", "gallery", "settings"].includes(hash) ? hash : (savedTab || "generate");
+  switchTab(targetTab);
+
   await loadHeroines();
   await loadBackends();
   await loadPurgeTags();
+  await loadBackups();
   await loadComfyStatus();
   setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
   await resetGallery();
   startBatchPolling();
 })();
+
 
 

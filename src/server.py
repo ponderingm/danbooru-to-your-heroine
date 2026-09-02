@@ -720,6 +720,26 @@ def update_purge_tags(req: PurgeTagsRequest):
     }
 
 
+class RestorePurgeTagsRequest(BaseModel):
+    filename: str
+
+
+@app.get("/purge_tags/backups")
+def get_purge_tag_backups():
+    """利用可能なパージタグのバックアップ一覧を取得"""
+    return {"backups": config.list_backups()}
+
+
+@app.post("/purge_tags/restore")
+def restore_purge_tags(req: RestorePurgeTagsRequest):
+    """指定されたバックアップからパージタグを復元"""
+    try:
+        res = config.restore_backup(req.filename)
+        return {"status": "ok", **res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/config/reload")
 def trigger_reload_config():
     """YAML設定とBaseルールを手動でホットリロード"""
@@ -728,6 +748,7 @@ def trigger_reload_config():
 
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
 
 if os.path.isdir(WEB_DIR):
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

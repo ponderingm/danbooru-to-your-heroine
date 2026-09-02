@@ -3,172 +3,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>danbooru-to-your-heroine ビューア</title>
+<title>danbooru-to-your-heroine v2.0</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1>⚡ danbooru-to-your-heroine <span class="version-badge">v2.0</span></h1>
+  <div class="header-main">
+    <h1>⚡ danbooru-to-your-heroine <span class="version-badge">v2.0</span></h1>
+    <div id="comfy-status" class="comfy-status"></div>
+  </div>
   <p class="subtitle">Danbooru / Gelbooru / AIBooru / Civitai の構文をヒロインに換装して自動生成</p>
-  <div id="comfy-status" class="comfy-status"></div>
+
+  <nav class="tabs-nav">
+    <button type="button" class="tab-btn active" data-tab="generate">⚡ 生成</button>
+    <button type="button" class="tab-btn" data-tab="gallery">🖼️ ギャラリー</button>
+    <button type="button" class="tab-btn" data-tab="settings">⚙️ 設定</button>
+  </nav>
 </header>
 
 <main>
-  <section id="generate-form" class="panel">
-    <h2>🎨 新規生成</h2>
-    <form id="form">
-      <label>
-        投稿URL (Danbooru / Gelbooru / AIBooru / Civitai)
-        <input type="url" id="f-url" placeholder="https://danbooru.donmai.us/posts/12345 または gelbooru/aibooru/civitai URL" required>
-      </label>
+  <!-- ─────────────────────────────────────────────
+       タブ1: 生成 (Generate)
+       ───────────────────────────────────────────── -->
+  <div id="tab-generate" class="tab-pane active">
+    <section id="generate-form" class="panel">
+      <h2>🎨 単一生成</h2>
+      <form id="form">
+        <label>
+          投稿URL (Danbooru / Gelbooru / AIBooru / Civitai)
+          <input type="url" id="f-url" placeholder="https://danbooru.donmai.us/posts/12345 または gelbooru/aibooru/civitai URL" required>
+        </label>
+        <div class="form-row">
+          <label>
+            ヒロイン
+            <select id="f-heroine"></select>
+          </label>
+          <label>
+            バックエンド
+            <select id="f-backend"></select>
+          </label>
+          <label>
+            Artistタグ
+            <select id="f-artist-mode">
+              <option value="none">除去 (none)</option>
+              <option value="keep">元投稿優先 (keep)</option>
+              <option value="override">ヒロイン固定 (override)</option>
+            </select>
+          </label>
+          <label>
+            カスタムArtist
+            <input type="text" id="f-custom-artist" placeholder="例: wlop">
+          </label>
+        </div>
+        <div class="form-row">
+          <button type="button" id="f-preview-btn" class="secondary">🔍 プロンプトプレビュー</button>
+        </div>
+        <label>
+          プロンプト (プレビュー / 編集)
+          <textarea id="f-prompt" rows="3" placeholder="プレビュー後に編集可能。空欄なら自動生成プロンプトを使用"></textarea>
+        </label>
+        <button type="submit" id="f-submit">⚡ 生成する</button>
+      </form>
+      <p id="form-status" class="status"></p>
+    </section>
+
+    <section id="batch-panel" class="panel">
+      <h2>🔄 自動バッチ生成</h2>
+      <p class="hint">検索クエリに合致する投稿を裏で連続生成（重複は自動スキップ）。手動生成が最優先。</p>
+      <form id="batch-form">
+        <label>
+          検索クエリ
+          <input type="text" id="b-search" placeholder="order:score rating:explicit micro_bikini" required>
+        </label>
+        <div class="form-row">
+          <label>
+            ヒロイン
+            <select id="b-heroine"></select>
+          </label>
+          <label>
+            バックエンド
+            <select id="b-backend"></select>
+          </label>
+          <label>
+            Artistタグ
+            <select id="b-artist-mode">
+              <option value="none">除去 (none)</option>
+              <option value="keep">元投稿優先 (keep)</option>
+              <option value="override">ヒロイン固定 (override)</option>
+            </select>
+          </label>
+          <label>
+            カスタムArtist
+            <input type="text" id="b-custom-artist" placeholder="例: wlop">
+          </label>
+          <label>
+            並び順
+            <select id="b-sort">
+              <option value="">新着順 (デフォルト)</option>
+              <option value="score">スコア順</option>
+              <option value="favcount">お気に入り順</option>
+              <option value="rank">ランク順</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="checkbox">
+            <input type="checkbox" id="b-lucky">
+            🍀 I'm Feeling Lucky (ランダム無限ループ)
+          </label>
+        </div>
+        <div class="form-row">
+          <button type="submit" id="b-start-btn">▶ バッチ開始</button>
+          <button type="button" id="b-stop-btn" class="secondary" disabled>⏹ 停止</button>
+        </div>
+      </form>
+      <p id="batch-status" class="status"></p>
+    </section>
+  </div>
+
+  <!-- ─────────────────────────────────────────────
+       タブ2: ギャラリー (Gallery)
+       ───────────────────────────────────────────── -->
+  <div id="tab-gallery" class="tab-pane">
+    <section class="panel">
+      <div class="gallery-header">
+        <h2>生成履歴</h2>
+        <button id="reload-btn" type="button">🔄 再読み込み</button>
+      </div>
       <div class="form-row">
         <label>
-          ヒロイン
-          <select id="f-heroine"></select>
-        </label>
-        <label>
-          バックエンド
-          <select id="f-backend"></select>
-        </label>
-        <label>
-          Artistタグ
-          <select id="f-artist-mode">
-            <option value="none">除去 (none)</option>
-            <option value="keep">元投稿優先 (keep)</option>
-            <option value="override">ヒロイン固定 (override)</option>
+          ヒロイン絞り込み
+          <select id="filter-heroine">
+            <option value="">すべて</option>
           </select>
         </label>
         <label>
-          カスタムArtist
-          <input type="text" id="f-custom-artist" placeholder="例: wlop">
-        </label>
-      </div>
-      <div class="form-row">
-        <button type="button" id="f-preview-btn" class="secondary">🔍 プロンプトプレビュー</button>
-      </div>
-      <label>
-        プロンプト (プレビュー / 編集)
-        <textarea id="f-prompt" rows="3" placeholder="プレビュー後に編集可能。空欄なら自動生成プロンプトを使用"></textarea>
-      </label>
-      <button type="submit" id="f-submit">⚡ 生成する</button>
-    </form>
-    <p id="form-status" class="status"></p>
-  </section>
-
-  <section id="purge-panel" class="panel">
-    <div class="gallery-header">
-      <h2>🛡️ 除外タグ管理 (Purge Tags)</h2>
-      <button type="button" id="purge-reload-btn" class="secondary">🔄 再読込</button>
-    </div>
-    <p class="hint">プロンプトから削るタグ（ノイズ除去・属性衝突防止）。Base層（公式辞書）にUser層（独自設定）が自動マージされます。</p>
-    <div class="form-row">
-      <label style="flex: 1;">
-        User独自パージタグ (カンマ区切りで追加・編集)
-        <input type="text" id="user-purge-input" placeholder="例: speech bubble, 3d, realistic">
-      </label>
-      <button type="button" id="purge-save-btn">💾 保存＆反映</button>
-    </div>
-    <div id="purge-info" class="status"></div>
-  </section>
-
-  <section id="batch-panel" class="panel">
-    <h2>⚡ 自動バッチ生成</h2>
-    <p class="hint">検索クエリに合致する投稿を裏で連続生成（重複は自動スキップ）。手動生成が最優先。</p>
-    <form id="batch-form">
-      <label>
-        検索クエリ
-        <input type="text" id="b-search" placeholder="order:score rating:explicit micro_bikini" required>
-      </label>
-      <div class="form-row">
-        <label>
-          ヒロイン
-          <select id="b-heroine"></select>
-        </label>
-        <label>
-          バックエンド
-          <select id="b-backend"></select>
-        </label>
-        <label>
-          Artistタグ
-          <select id="b-artist-mode">
-            <option value="none">除去 (none)</option>
-            <option value="keep">元投稿優先 (keep)</option>
-            <option value="override">ヒロイン固定 (override)</option>
+          モデル絞り込み
+          <select id="filter-model">
+            <option value="">すべて</option>
+            <option value="illustrious">illustrious</option>
+            <option value="anima">anima</option>
           </select>
         </label>
         <label>
-          カスタムArtist
-          <input type="text" id="b-custom-artist" placeholder="例: wlop">
+          期間(開始)
+          <input type="date" id="filter-date-from">
         </label>
         <label>
-          並び順
-          <select id="b-sort">
-            <option value="">新着順 (デフォルト)</option>
-            <option value="score">スコア順</option>
-            <option value="favcount">お気に入り順</option>
-            <option value="rank">ランク順</option>
+          期間(終了)
+          <input type="date" id="filter-date-to">
+        </label>
+        <label>
+          タグ絞り込み
+          <select id="filter-tag-select">
+            <option value="">タグを選択して追加</option>
           </select>
         </label>
+        <button type="button" id="filter-apply-btn">絞り込む</button>
+        <button type="button" id="filter-reset-btn" class="secondary">リセット</button>
       </div>
+      <div id="filter-tag-chips" class="tag-chips"></div>
+      <div id="gallery" class="gallery"></div>
+      <div class="load-more-row">
+        <button type="button" id="load-more-btn" class="secondary hidden">もっと見る</button>
+        <span id="gallery-count" class="status"></span>
+      </div>
+    </section>
+  </div>
+
+  <!-- ─────────────────────────────────────────────
+       タブ3: 設定 (Settings)
+       ───────────────────────────────────────────── -->
+  <div id="tab-settings" class="tab-pane">
+    <section id="purge-panel" class="panel">
+      <div class="gallery-header">
+        <h2>🛡️ 除外タグ管理 (Purge Tags)</h2>
+        <button type="button" id="purge-reload-btn" class="secondary">🔄 再読込</button>
+      </div>
+      <p class="hint">プロンプトから削るタグ（ノイズ除去・属性衝突防止）。Base層（公式辞書）にUser層（独自設定）が自動マージされます。</p>
       <div class="form-row">
-        <label class="checkbox">
-          <input type="checkbox" id="b-lucky">
-          🍀 I'm Feeling Lucky (ランダム無限ループ)
+        <label style="flex: 1;">
+          User独自パージタグ (カンマ区切りで追加・編集)
+          <input type="text" id="user-purge-input" placeholder="例: speech bubble, 3d, realistic">
         </label>
+        <button type="button" id="purge-save-btn">💾 保存＆反映</button>
       </div>
+      <div id="purge-info" class="status"></div>
+    </section>
+
+    <section id="backup-panel" class="panel">
+      <h2>💾 バックアップ ＆ タイムマシーン復元</h2>
+      <p class="hint">タグを保存するたびに直前の状態が自動退避されます。うっかり消してしまっても過去の時点を選んでワンクリック復元できます。</p>
       <div class="form-row">
-        <button type="submit" id="b-start-btn">▶ バッチ開始</button>
-        <button type="button" id="b-stop-btn" class="secondary" disabled>⏹ 停止</button>
+        <label style="flex: 1;">
+          過去の自動バックアップ一覧
+          <select id="backup-select">
+            <option value="">バックアップを読み込み中...</option>
+          </select>
+        </label>
+        <button type="button" id="backup-restore-btn" class="secondary">🕒 この時点に復元</button>
       </div>
-    </form>
-    <p id="batch-status" class="status"></p>
-  </section>
+      <p id="backup-status" class="status"></p>
+    </section>
 
-
-  <section class="panel">
-    <div class="gallery-header">
-      <h2>生成履歴</h2>
-      <button id="reload-btn" type="button">再読み込み</button>
-    </div>
-    <div class="form-row">
-      <label>
-        ヒロイン絞り込み
-        <select id="filter-heroine">
-          <option value="">すべて</option>
-        </select>
-      </label>
-      <label>
-        モデル絞り込み
-        <select id="filter-model">
-          <option value="">すべて</option>
-          <option value="illustrious">illustrious</option>
-          <option value="anima">anima</option>
-        </select>
-      </label>
-      <label>
-        期間(開始)
-        <input type="date" id="filter-date-from">
-      </label>
-      <label>
-        期間(終了)
-        <input type="date" id="filter-date-to">
-      </label>
-      <label>
-        タグ絞り込み(複数可)
-        <select id="filter-tag-select">
-          <option value="">タグを選択して追加</option>
-        </select>
-      </label>
-      <button type="button" id="filter-apply-btn">絞り込む</button>
-      <button type="button" id="filter-reset-btn" class="secondary">リセット</button>
-    </div>
-    <div id="filter-tag-chips" class="tag-chips"></div>
-    <div id="gallery" class="gallery"></div>
-    <div class="load-more-row">
-      <button type="button" id="load-more-btn" class="secondary hidden">もっと見る</button>
-      <span id="gallery-count" class="status"></span>
-    </div>
-  </section>
+    <section id="system-panel" class="panel">
+      <h2>⚙️ システム運用</h2>
+      <div class="form-row">
+        <button type="button" id="config-reload-btn" class="secondary">🔄 設定ファイル（config.yaml）の再読み込み</button>
+      </div>
+      <p id="system-status" class="status"></p>
+    </section>
+  </div>
 </main>
 
 <div id="lightbox" class="lightbox hidden">
