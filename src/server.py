@@ -833,7 +833,42 @@ def test_discord_notification():
     return {"status": "ok", "message": "テスト通知を送信しました"}
 
 
+class SiteAuthConfigRequest(BaseModel):
+    civitai_api_key: Optional[str] = None
+    danbooru_login: Optional[str] = None
+    danbooru_api_key: Optional[str] = None
+    gelbooru_user_id: Optional[str] = None
+    gelbooru_api_key: Optional[str] = None
+
+
+@app.get("/config/site_auth")
+def get_site_auth_config():
+    """各サイトのAPI認証情報を取得"""
+    user_cfg = getattr(config, "USER_CONFIG", {})
+    return {
+        "civitai_api_key": user_cfg.get("civitai_api_key", "") or "",
+        "danbooru_login": user_cfg.get("danbooru_login", "") or "",
+        "danbooru_api_key": user_cfg.get("danbooru_api_key", "") or "",
+        "gelbooru_user_id": user_cfg.get("gelbooru_user_id", "") or "",
+        "gelbooru_api_key": user_cfg.get("gelbooru_api_key", "") or "",
+    }
+
+
+@app.post("/config/site_auth")
+def update_site_auth_config(req: SiteAuthConfigRequest):
+    """各サイトのAPI認証情報を保存してホットリロード"""
+    config.save_site_auth_config(
+        civitai_api_key=req.civitai_api_key,
+        danbooru_login=req.danbooru_login,
+        danbooru_api_key=req.danbooru_api_key,
+        gelbooru_user_id=req.gelbooru_user_id,
+        gelbooru_api_key=req.gelbooru_api_key,
+    )
+    return {"status": "ok"}
+
+
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
 
 
 

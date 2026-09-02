@@ -257,6 +257,48 @@
       <p id="notif-status" class="status"></p>
     </section>
 
+    <section id="site-auth-panel" class="panel">
+      <h2>🔑 外部サイト認証・APIキー設定</h2>
+      <p class="hint">CivitaiのNSFW（成人向け）画像取得や、Danbooru / Gelbooru のAPI制限緩和に必要な認証キーを設定します（全て任意・未設定でも多くの機能は動作します）。</p>
+      
+      <div class="form-row">
+        <label style="flex: 2;">
+          Civitai API Key (Personal Access Token)
+          <input type="password" id="auth-civitai-key" placeholder="Civitaiアカウント設定 > API Keys で作成したトークン">
+        </label>
+      </div>
+      <p class="hint" style="margin-top: -6px; margin-bottom: 12px; font-size: 0.75rem; color: #888;">
+        ※ CivitaiでNSFW（R/X/XXX）画像のプロンプトを取得する場合、Civitaiの無料アカウントから発行できるAPI Keyが必須となります。
+      </p>
+
+      <div class="form-row">
+        <label style="flex: 1;">
+          Danbooru Login (ユーザー名)
+          <input type="text" id="auth-danbooru-login" placeholder="Danbooruのユーザー名">
+        </label>
+        <label style="flex: 1.5;">
+          Danbooru API Key
+          <input type="password" id="auth-danbooru-key" placeholder="Danbooruのアカウント設定から取得">
+        </label>
+      </div>
+
+      <div class="form-row">
+        <label style="flex: 1;">
+          Gelbooru User ID (数値)
+          <input type="text" id="auth-gelbooru-uid" placeholder="GelbooruのアカウントID (例: 123456)">
+        </label>
+        <label style="flex: 1.5;">
+          Gelbooru API Key
+          <input type="password" id="auth-gelbooru-key" placeholder="Gelbooruのアカウント設定から取得">
+        </label>
+      </div>
+
+      <div class="form-row" style="margin-top: 8px;">
+        <button type="button" id="auth-save-btn">💾 APIキー設定を保存</button>
+      </div>
+      <p id="auth-status" class="status"></p>
+    </section>
+
     <section id="system-panel" class="panel">
       <h2>⚙️ システム運用</h2>
       <div class="form-row">
@@ -265,6 +307,7 @@
       <p id="system-status" class="status"></p>
     </section>
   </div>
+
 
 </main>
 

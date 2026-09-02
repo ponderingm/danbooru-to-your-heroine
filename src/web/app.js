@@ -917,6 +917,56 @@ if (notifTestBtn) {
   });
 }
 
+const authCivitaiKey = document.getElementById("auth-civitai-key");
+const authDanbooruLogin = document.getElementById("auth-danbooru-login");
+const authDanbooruKey = document.getElementById("auth-danbooru-key");
+const authGelbooruUid = document.getElementById("auth-gelbooru-uid");
+const authGelbooruKey = document.getElementById("auth-gelbooru-key");
+const authSaveBtn = document.getElementById("auth-save-btn");
+const authStatusEl = document.getElementById("auth-status");
+
+async function loadSiteAuthConfig() {
+  if (!authCivitaiKey) return;
+  try {
+    const res = await fetch(`${API_BASE}/config/site_auth`);
+    if (!res.ok) return;
+    const data = await res.json();
+    authCivitaiKey.value = data.civitai_api_key || "";
+    authDanbooruLogin.value = data.danbooru_login || "";
+    authDanbooruKey.value = data.danbooru_api_key || "";
+    authGelbooruUid.value = data.gelbooru_user_id || "";
+    authGelbooruKey.value = data.gelbooru_api_key || "";
+  } catch (err) {
+    console.error("Failed to load site auth config:", err);
+  }
+}
+
+if (authSaveBtn) {
+  authSaveBtn.addEventListener("click", async () => {
+    authSaveBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/config/site_auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          civitai_api_key: authCivitaiKey.value.trim(),
+          danbooru_login: authDanbooruLogin.value.trim(),
+          danbooru_api_key: authDanbooruKey.value.trim(),
+          gelbooru_user_id: authGelbooruUid.value.trim(),
+          gelbooru_api_key: authGelbooruKey.value.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadBackups();
+      setStatus(authStatusEl, "✅ 外部サイトAPIキーを保存し、即時反映しました！", "success");
+    } catch (err) {
+      setStatus(authStatusEl, `❌ 保存失敗: ${err.message}`, "error");
+    } finally {
+      authSaveBtn.disabled = false;
+    }
+  });
+}
+
 (async function init() {
   // 保存されていたタブ、またはURLハッシュから復元
   const hash = location.hash.replace("#", "");
@@ -931,11 +981,13 @@ if (notifTestBtn) {
   await loadPurgeTags();
   await loadBackups();
   await loadNotificationConfig();
+  await loadSiteAuthConfig();
   await loadComfyStatus();
   setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
   await resetGallery();
   startBatchPolling();
 })();
+
 
 
 

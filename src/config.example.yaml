@@ -72,9 +72,13 @@ cors_origins:
   - "https://danbooru.donmai.us"
   - "https://gelbooru.com"
 
-# 外部サイト認証（任意、匿名なら null）
+# 外部サイト認証（任意、未設定なら null）
 danbooru_login: null
 danbooru_api_key: null
+gelbooru_user_id: null
+gelbooru_api_key: null
+civitai_api_key: null
+
 
 # バッチ停止しきい値
 max_consecutive_failures: 3
