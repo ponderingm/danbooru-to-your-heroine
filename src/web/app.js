@@ -13,8 +13,8 @@ const RATING_TAG_ALIASES = {
 
 const heroineSelect = document.getElementById("f-heroine");
 const backendSelect = document.getElementById("f-backend");
-const artistModeSelect = document.getElementById("f-artist-mode");
-const customArtistInput = document.getElementById("f-custom-artist");
+const fArtistInput = document.getElementById("f-artist");
+const artistDatalist = document.getElementById("artist-datalist");
 const urlInput = document.getElementById("f-url");
 const form = document.getElementById("form");
 const submitBtn = document.getElementById("f-submit");
@@ -40,15 +40,62 @@ const lightboxClose = document.getElementById("lightbox-close");
 
 const batchForm = document.getElementById("batch-form");
 const batchSearchInput = document.getElementById("b-search");
+const searchHistoryDatalist = document.getElementById("search-history-datalist");
 const batchHeroineSelect = document.getElementById("b-heroine");
 const batchBackendSelect = document.getElementById("b-backend");
-const batchArtistModeSelect = document.getElementById("b-artist-mode");
-const batchCustomArtistInput = document.getElementById("b-custom-artist");
+const bArtistInput = document.getElementById("b-artist");
 const batchSortSelect = document.getElementById("b-sort");
 const batchLuckyCheckbox = document.getElementById("b-lucky");
 const batchStartBtn = document.getElementById("b-start-btn");
 const batchStopBtn = document.getElementById("b-stop-btn");
 const batchStatusEl = document.getElementById("batch-status");
+
+function resolveArtistInput(val) {
+  const v = (val || "").trim();
+  if (!v || v === "none") return { artist_mode: "none", custom_artist: undefined };
+  if (v === "keep") return { artist_mode: "keep", custom_artist: undefined };
+  if (v === "override") return { artist_mode: "override", custom_artist: undefined };
+  return { artist_mode: "custom", custom_artist: v };
+}
+
+function saveSearchHistory(query) {
+  const q = (query || "").trim();
+  if (!q) return;
+  let history = JSON.parse(localStorage.getItem("d2h_search_history") || "[]");
+  history = [q, ...history.filter(item => item !== q)].slice(0, 20);
+  localStorage.setItem("d2h_search_history", JSON.stringify(history));
+  renderSearchHistoryDatalist();
+}
+
+function renderSearchHistoryDatalist() {
+  if (!searchHistoryDatalist) return;
+  const history = JSON.parse(localStorage.getItem("d2h_search_history") || "[]");
+  searchHistoryDatalist.innerHTML = history.map(item => `<option value="${escapeHtml(item)}"></option>`).join("");
+}
+
+function saveArtistHistory(artist) {
+  const a = (artist || "").trim();
+  if (!a || ["none", "keep", "override"].includes(a)) return;
+  let history = JSON.parse(localStorage.getItem("d2h_artist_history") || "[]");
+  history = [a, ...history.filter(item => item !== a)].slice(0, 20);
+  localStorage.setItem("d2h_artist_history", JSON.stringify(history));
+  renderArtistDatalist();
+}
+
+function renderArtistDatalist() {
+  if (!artistDatalist) return;
+  const history = JSON.parse(localStorage.getItem("d2h_artist_history") || "[]");
+  let html = `
+    <option value="none">除去 (none)</option>
+    <option value="keep">元投稿優先 (keep)</option>
+    <option value="override">ヒロイン固定 (override)</option>
+  `;
+  if (history.length > 0) {
+    html += history.map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)} (履歴)</option>`).join("");
+  }
+  artistDatalist.innerHTML = html;
+}
+
 
 const userPurgeInput = document.getElementById("user-purge-input");
 const purgeSaveBtn = document.getElementById("purge-save-btn");
@@ -249,6 +296,7 @@ previewBtn.addEventListener("click", async () => {
   }
   previewBtn.disabled = true;
   setStatus(formStatus, "変換中…");
+  const artistParams = resolveArtistInput(fArtistInput ? fArtistInput.value : "");
   try {
     const res = await fetch(`${API_BASE}/convert`, {
       method: "POST",
@@ -257,8 +305,7 @@ previewBtn.addEventListener("click", async () => {
         url,
         heroine: heroineSelect.value,
         backend: backendSelect.value,
-        artist_mode: artistModeSelect.value,
-        custom_artist: customArtistInput.value.trim() || undefined,
+        ...artistParams,
       }),
     });
     if (!res.ok) {
@@ -278,12 +325,14 @@ previewBtn.addEventListener("click", async () => {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   submitBtn.disabled = true;
+  const artistParams = resolveArtistInput(fArtistInput ? fArtistInput.value : "");
+  if (artistParams.custom_artist) saveArtistHistory(artistParams.custom_artist);
+
   const payload = {
     url: urlInput.value.trim(),
     heroine: heroineSelect.value,
     backend: backendSelect.value,
-    artist_mode: artistModeSelect.value,
-    custom_artist: customArtistInput.value.trim() || undefined,
+    ...artistParams,
     prompt_override: promptTextarea.value.trim() || undefined,
   };
   try {
@@ -297,6 +346,7 @@ form.addEventListener("submit", async (e) => {
     submitBtn.disabled = false;
   }
 });
+
 
 async function deleteEntry(entryId, card) {
   if (!confirm("この生成履歴と画像ファイルを削除する？")) return;
@@ -496,15 +546,21 @@ batchLuckyCheckbox.addEventListener("change", () => {
 batchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   batchStartBtn.disabled = true;
+  const query = batchSearchInput.value.trim();
+  saveSearchHistory(query);
+
+  const batchArtistParams = resolveArtistInput(bArtistInput ? bArtistInput.value : "");
+  if (batchArtistParams.custom_artist) saveArtistHistory(batchArtistParams.custom_artist);
+
   const payload = {
-    search: batchSearchInput.value.trim(),
+    search: query,
     heroine: batchHeroineSelect.value,
     backend: batchBackendSelect.value,
-    artist_mode: batchArtistModeSelect.value,
-    custom_artist: batchCustomArtistInput.value.trim() || undefined,
+    ...batchArtistParams,
     sort: batchSortSelect.value || null,
     lucky: batchLuckyCheckbox.checked,
   };
+
   try {
     const status = await fetch(`${API_BASE}/batch/start`, {
       method: "POST",
@@ -750,6 +806,8 @@ if (configReloadBtn) {
 
   await loadHeroines();
   await loadBackends();
+  renderArtistDatalist();
+  renderSearchHistoryDatalist();
   await loadPurgeTags();
   await loadBackups();
   await loadComfyStatus();
@@ -757,6 +815,7 @@ if (configReloadBtn) {
   await resetGallery();
   startBatchPolling();
 })();
+
 
 
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Danbooru to Heroine
 // @namespace    https://github.com/danbooru-to-your-heroine
-// @version      2.0.0
+// @version      2.1.0
 // @description  Danbooru / Gelbooru / AIBooru / Civitai にヒロイン化画像生成UIを追加する
 // @author       you
 // @match        https://danbooru.donmai.us/posts*
@@ -41,6 +41,43 @@
   function heroineLabel(key) {
     return (heroines[key] && heroines[key].name) || key;
   }
+
+  function ensureArtistDatalist() {
+    let dl = document.getElementById("d2h-artist-datalist");
+    if (!dl) {
+      dl = document.createElement("datalist");
+      dl.id = "d2h-artist-datalist";
+      document.body.appendChild(dl);
+    }
+    const history = getSetting("d2h_artist_history", []);
+    let html = `
+      <option value="none">除去 (none)</option>
+      <option value="keep">元投稿優先 (keep)</option>
+      <option value="override">ヒロイン固定 (override)</option>
+    `;
+    if (history.length > 0) {
+      html += history.map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)} (履歴)</option>`).join("");
+    }
+    dl.innerHTML = html;
+  }
+
+  function saveTampermonkeyArtistHistory(artist) {
+    const a = (artist || "").trim();
+    if (!a || ["none", "keep", "override"].includes(a)) return;
+    let history = getSetting("d2h_artist_history", []);
+    history = [a, ...history.filter(item => item !== a)].slice(0, 20);
+    setSetting("d2h_artist_history", history);
+    ensureArtistDatalist();
+  }
+
+  function resolveTampermonkeyArtist(val) {
+    const v = (val || "").trim();
+    if (!v || v === "none") return { artist_mode: "none", custom_artist: undefined };
+    if (v === "keep") return { artist_mode: "keep", custom_artist: undefined };
+    if (v === "override") return { artist_mode: "override", custom_artist: undefined };
+    return { artist_mode: "custom", custom_artist: v };
+  }
+
 
   function escapeHtml(str) {
     return String(str)
@@ -481,18 +518,14 @@
   // ─────────────────────────────────────────────
 
   function buildPanel() {
+    ensureArtistDatalist();
     const panel = document.createElement("div");
     panel.id = "d2h-panel";
     panel.innerHTML = `
       <h3>ヒロイン化生成</h3>
       <select id="d2h-heroine" class="d2h-heroine-select"><option>読込中...</option></select>
       <select id="d2h-backend" class="d2h-backend-select"><option>読込中...</option></select>
-      <select id="d2h-artist-mode">
-        <option value="none">artist除去(none)</option>
-        <option value="keep">元投稿優先(keep)</option>
-        <option value="override">ヒロイン固定(override)</option>
-      </select>
-      <input type="text" id="d2h-custom-artist" placeholder="artist自由記述（任意、上の選択より優先）">
+      <input type="text" id="d2h-artist" list="d2h-artist-datalist" placeholder="Artist: none, keep, override または作家名" style="width: 100%; box-sizing: border-box; margin: 4px 0;">
       <button type="button" id="d2h-generate">生成キューに投入</button>
       <div id="d2h-status"></div>
     `;
@@ -503,20 +536,21 @@
   function wireUp(panel, queuePanel) {
     const heroineSelect = panel.querySelector("#d2h-heroine");
     const backendSelect = panel.querySelector("#d2h-backend");
-    const artistModeSelect = panel.querySelector("#d2h-artist-mode");
-    const customArtistInput = panel.querySelector("#d2h-custom-artist");
+    const artistInput = panel.querySelector("#d2h-artist");
     const generateBtn = panel.querySelector("#d2h-generate");
     const statusEl = panel.querySelector("#d2h-status");
 
-    artistModeSelect.value = getSetting("d2h_last_artist_mode", "none");
-    customArtistInput.value = getSetting("d2h_last_custom_artist", "");
+    artistInput.value = getSetting("d2h_last_artist_val", "none");
 
     generateBtn.addEventListener("click", async () => {
       generateBtn.disabled = true;
+      const artistVal = artistInput.value.trim();
       setSetting("d2h_last_heroine", heroineSelect.value);
       setSetting("d2h_last_backend", backendSelect.value);
-      setSetting("d2h_last_artist_mode", artistModeSelect.value);
-      setSetting("d2h_last_custom_artist", customArtistInput.value.trim());
+      setSetting("d2h_last_artist_val", artistVal);
+      saveTampermonkeyArtistHistory(artistVal);
+
+      const artistParams = resolveTampermonkeyArtist(artistVal);
 
       const match = location.pathname.match(/^\/posts\/(\d+)/);
       const postId = match ? parseInt(match[1], 10) : null;
@@ -527,9 +561,9 @@
           url: canonicalPostUrl(),
           heroine: heroineSelect.value,
           backend: backendSelect.value,
-          artist_mode: artistModeSelect.value,
-          custom_artist: customArtistInput.value.trim() || undefined,
+          ...artistParams,
         });
+
         addToQueue(queuePanel, {
           job_id, post_id: postId, heroine_label: heroineLabel(heroineSelect.value), status: "queued",
         });
@@ -547,18 +581,14 @@
   // ─────────────────────────────────────────────
 
   function buildBatchPanel() {
+    ensureArtistDatalist();
     const panel = document.createElement("div");
     panel.id = "d2h-panel";
     panel.innerHTML = `
       <h3>一括ヒロイン化生成</h3>
       <select id="d2h-heroine" class="d2h-heroine-select"><option>読込中...</option></select>
       <select id="d2h-backend" class="d2h-backend-select"><option>読込中...</option></select>
-      <select id="d2h-artist-mode">
-        <option value="none">artist除去(none)</option>
-        <option value="keep">元投稿優先(keep)</option>
-        <option value="override">ヒロイン固定(override)</option>
-      </select>
-      <input type="text" id="d2h-custom-artist" placeholder="artist自由記述（任意、上の選択より優先）">
+      <input type="text" id="d2h-artist" list="d2h-artist-datalist" placeholder="Artist: none, keep, override または作家名" style="width: 100%; box-sizing: border-box; margin: 4px 0;">
       <div class="d2h-count" id="d2h-selected-count">選択中: 0件（サムネイル右上のチェックボックスで選択）</div>
       <button type="button" id="d2h-batch-submit" disabled>選択した投稿をキューに投入</button>
       <div id="d2h-status"></div>
@@ -593,22 +623,23 @@
   function wireBatchPanel(panel, queuePanel) {
     const heroineSelect = panel.querySelector("#d2h-heroine");
     const backendSelect = panel.querySelector("#d2h-backend");
-    const artistModeSelect = panel.querySelector("#d2h-artist-mode");
-    const customArtistInput = panel.querySelector("#d2h-custom-artist");
+    const artistInput = panel.querySelector("#d2h-artist");
     const submitBtn = panel.querySelector("#d2h-batch-submit");
     const statusEl = panel.querySelector("#d2h-status");
 
-    artistModeSelect.value = getSetting("d2h_last_artist_mode", "none");
-    customArtistInput.value = getSetting("d2h_last_custom_artist", "");
+    artistInput.value = getSetting("d2h_last_artist_val", "none");
 
     submitBtn.addEventListener("click", async () => {
       const checkboxes = Array.from(document.querySelectorAll(".d2h-select-cb:checked"));
       if (!checkboxes.length) return;
       submitBtn.disabled = true;
+      const artistVal = artistInput.value.trim();
       setSetting("d2h_last_heroine", heroineSelect.value);
       setSetting("d2h_last_backend", backendSelect.value);
-      setSetting("d2h_last_artist_mode", artistModeSelect.value);
-      setSetting("d2h_last_custom_artist", customArtistInput.value.trim());
+      setSetting("d2h_last_artist_val", artistVal);
+      saveTampermonkeyArtistHistory(artistVal);
+
+      const artistParams = resolveTampermonkeyArtist(artistVal);
 
       setStatus(statusEl, `${checkboxes.length}件をキューに投入中…`);
       let okCount = 0;
@@ -619,9 +650,9 @@
             url: canonicalPostUrl(postId),
             heroine: heroineSelect.value,
             backend: backendSelect.value,
-            artist_mode: artistModeSelect.value,
-            custom_artist: customArtistInput.value.trim() || undefined,
+            ...artistParams,
           });
+
           addToQueue(queuePanel, {
             job_id, post_id: postId, heroine_label: heroineLabel(heroineSelect.value), status: "queued",
           });

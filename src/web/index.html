@@ -42,17 +42,9 @@
             バックエンド
             <select id="f-backend"></select>
           </label>
-          <label>
-            Artistタグ
-            <select id="f-artist-mode">
-              <option value="none">除去 (none)</option>
-              <option value="keep">元投稿優先 (keep)</option>
-              <option value="override">ヒロイン固定 (override)</option>
-            </select>
-          </label>
-          <label>
-            カスタムArtist
-            <input type="text" id="f-custom-artist" placeholder="例: wlop">
+          <label style="flex: 1.5;">
+            Artist (選択または自由入力)
+            <input type="text" id="f-artist" list="artist-datalist" placeholder="none, keep, override または 作家名 (例: wlop)" value="none">
           </label>
         </div>
         <div class="form-row">
@@ -72,8 +64,9 @@
       <p class="hint">検索クエリに合致する投稿を裏で連続生成（重複は自動スキップ）。手動生成が最優先。</p>
       <form id="batch-form">
         <label>
-          検索クエリ
-          <input type="text" id="b-search" placeholder="order:score rating:explicit micro_bikini" required>
+          検索クエリ (履歴から選択または入力)
+          <input type="text" id="b-search" list="search-history-datalist" placeholder="order:score rating:explicit micro_bikini" required>
+          <datalist id="search-history-datalist"></datalist>
         </label>
         <div class="form-row">
           <label>
@@ -84,17 +77,9 @@
             バックエンド
             <select id="b-backend"></select>
           </label>
-          <label>
-            Artistタグ
-            <select id="b-artist-mode">
-              <option value="none">除去 (none)</option>
-              <option value="keep">元投稿優先 (keep)</option>
-              <option value="override">ヒロイン固定 (override)</option>
-            </select>
-          </label>
-          <label>
-            カスタムArtist
-            <input type="text" id="b-custom-artist" placeholder="例: wlop">
+          <label style="flex: 1.5;">
+            Artist (選択または自由入力)
+            <input type="text" id="b-artist" list="artist-datalist" placeholder="none, keep, override または 作家名" value="none">
           </label>
           <label>
             並び順
@@ -106,6 +91,7 @@
             </select>
           </label>
         </div>
+
         <div class="form-row">
           <label class="checkbox">
             <input type="checkbox" id="b-lucky">
@@ -242,6 +228,14 @@
   <img id="lightbox-img" src="" alt="拡大表示">
 </div>
 
+<datalist id="artist-datalist">
+  <option value="none">除去 (none)</option>
+  <option value="keep">元投稿優先 (keep)</option>
+  <option value="override">ヒロイン固定 (override)</option>
+</datalist>
+
+
 <script src="app.js"></script>
 </body>
 </html>
+
