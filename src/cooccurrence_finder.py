@@ -13,12 +13,29 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import requests
 import config
 
-# 共起分析で除外すべき自明・頻出メタタグ
+# 共起分析で除外すべき自明メタタグ
 COMMON_STOP_TAGS = {
     "1girl", "solo", "looking_at_viewer", "highres", "absurdres",
     "bad_anatomy", "bad_hands", "translation_request", "translated",
-    "text", "watermark", "signature", "artist_name",
+    "text", "watermark", "signature", "artist_name", "censored", "uncensored",
 }
+
+# ベン図の中心核（モチーフ・装飾・フェチ・行為）を純粋抽出するために除外する
+# 「背景・環境（バックグラウンド）」および「普遍的な人体・髪型タグ」
+BACKGROUND_AND_GENERIC_TAGS = {
+    # 背景・環境・自然・光彩ノイズ
+    "sky", "blue_sky", "cloud", "clouds", "outdoors", "indoors", "simple_background",
+    "white_background", "grey_background", "black_background", "night", "day",
+    "sunlight", "shadow", "depth_of_field", "blurry_background", "sparkle", "glowing",
+    "scenery", "nature", "tree", "plant", "water", "flower", "flowers",
+    "ocean", "sea", "beach", "sand", "waves", "horizon", "shore", "coast",
+    # 普遍的な身体・髪・顔（ヒロインDNAや大衆特徴）
+    "breasts", "large_breasts", "medium_breasts", "small_breasts", "cleavage",
+    "long_hair", "short_hair", "black_hair", "blonde_hair", "brown_hair", "blue_hair",
+    "ponytail", "twintails", "bangs", "open_mouth", "closed_eyes", "blush", "smile",
+    "navel", "bare_shoulders", "collarbone", "thighs", "barefoot",
+}
+
 
 
 def fetch_gelbooru_intersection_posts(
@@ -123,7 +140,7 @@ def analyze_cooccurrence_core(
             norm_t = t.strip().lower()
             if not norm_t:
                 continue
-            if norm_t in input_tag_set or norm_t in COMMON_STOP_TAGS:
+            if norm_t in input_tag_set or norm_t in COMMON_STOP_TAGS or norm_t in BACKGROUND_AND_GENERIC_TAGS:
                 continue
             tag_counts[norm_t] += 1
 
@@ -154,6 +171,10 @@ def analyze_cooccurrence_core(
         # カテゴリ分類: 0=一般, 1=絵師, 3=作品, 4=キャラクター, 5=メタ
         # 共起の核（シチュエーション・装飾・フェチ）としては一般タグ（0）を最優先する
         if category in (1, 3, 4, 5):
+            continue
+
+        # Danbooruに実在しない架空タグや0件タグは除外
+        if check_rarity and global_count <= 0:
             continue
 
         local_ratio = local_count / total_posts
