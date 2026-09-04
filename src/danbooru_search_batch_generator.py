@@ -8,14 +8,14 @@ danbooru_to_heroine.py と同じロジックでタグを config.py で定義し�
 Usage:
     uv run python src/danbooru_search_batch_generator.py "micro_bikini"
     uv run python src/danbooru_search_batch_generator.py "santa_costume rating:explicit" --limit 30 --pages 2
-    uv run python src/danbooru_search_batch_generator.py "school_uniform" --heroine rinko --backend anima_fast
+    uv run python src/danbooru_search_batch_generator.py "school_uniform" --heroine example_heroine --backend anima_fast
     uv run python src/danbooru_search_batch_generator.py "rating:explicit" --lucky
     uv run python src/danbooru_search_batch_generator.py "order:score rating:explicit micro_bikini beach 1girl" --limit 10
     uv run python src/danbooru_search_batch_generator.py "order:favcount swimsuit -competition_swimsuit" --all
 
 事前準備:
-    cp src/config.example.py src/config.py
-    # src/config.py を自分の環境（ComfyUIのURL・保存先ディレクトリ・HEROINES等）に合わせて編集する
+    cp src/config.example.yaml src/config.yaml
+    # src/config.yaml を自分の環境に合わせて編集する
 """
 
 import os
@@ -24,6 +24,7 @@ import sys
 import json
 import time
 import argparse
+import shlex
 
 import requests
 
@@ -100,18 +101,47 @@ def search_posts(tags: str, limit: int, page: int, login: str = None, api_key: s
         params["login"] = login
         params["api_key"] = api_key
     headers = {"User-Agent": "danbooru-to-your-heroine/1.0"}
-    resp = requests.get(endpoint, params=params, headers=headers, timeout=15)
+    resp = requests.get(endpoint, params=params, headers=headers, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
 
 def _tokenize_search_query(search_str: str):
-    """検索文字列を order:タグ / キーワードタグ / rating:フィルタ / 除外タグ(-tag) に分解する"""
+    """検索文字列を order:タグ / キーワードタグ / rating:フィルタ / 除外タグ(-tag) に分解する。
+    カンマ区切りおよび空白区切りに対応し、タグ内のスペースはアンダースコアに正規化する。
+    """
     order_tag = None
     keyword_tags = []
     ratings = set()
     excluded_tags = set()
-    for tok in search_str.split():
+
+    # 【案C: カンマ有無による条件分け】
+    # カンマが含まれる場合: カンマをタグ区切りとみなし、各チャンク内のスペースはアンダースコア(_)に正規化
+    # カンマが含まれない場合: 空白区切りとし、クォート("..." / '...')内のみアンダースコア(_)に正規化
+    if "," in search_str:
+        chunks = [c.strip() for c in search_str.split(",") if c.strip()]
+        raw_tokens = []
+        for chunk in chunks:
+            chunk_clean = chunk.strip("\"'")
+            if not chunk_clean:
+                continue
+            try:
+                parts = shlex.split(chunk)
+            except ValueError:
+                parts = chunk.split()
+
+            if len(parts) > 1 and any(p.startswith(("order:", "rating:", "-")) for p in parts):
+                raw_tokens.extend(parts)
+            else:
+                raw_tokens.append(chunk_clean.replace(" ", "_"))
+    else:
+        try:
+            raw_tokens = shlex.split(search_str)
+        except ValueError:
+            raw_tokens = search_str.split()
+
+    for raw_tok in raw_tokens:
+        tok = raw_tok.strip().strip(",")
         if tok.startswith("order:"):
             if order_tag is None:
                 order_tag = tok
@@ -120,9 +150,9 @@ def _tokenize_search_query(search_str: str):
             if code in "gsqe":
                 ratings.add(code)
         elif tok.startswith("-") and len(tok) > 1:
-            excluded_tags.add(tok[1:])
+            excluded_tags.add(tok[1:].replace(" ", "_"))
         else:
-            keyword_tags.append(tok)
+            keyword_tags.append(tok.replace(" ", "_"))
     return order_tag, keyword_tags, ratings, excluded_tags
 
 

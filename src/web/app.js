@@ -11,6 +11,11 @@ const RATING_TAG_ALIASES = {
   explicit: "rating:explicit",
 };
 
+// バッチ検索クエリで未知のタグが検出された際の確認ポップアップ文面
+const MSG_UNKNOWN_BATCH_TAGS_WARN =
+  "【確認】以下のタグはDanbooruタグ辞書に見つかりませんでした。\n" +
+  "スペルミス等の可能性がありますが、このままバッチを開始しますか？\n\n";
+
 const heroineSelect = document.getElementById("f-heroine");
 const backendSelect = document.getElementById("f-backend");
 const fArtistInput = document.getElementById("f-artist");
@@ -80,6 +85,10 @@ function setupCombobox({ inputEl, dropdownEl, getItems, onSelect, onDelete }) {
 
   function renderDropdown() {
     const filterText = inputEl.value.trim().toLowerCase();
+    if (inputEl.dataset.hasTagAutocomplete === "true" && filterText.length > 0) {
+      closeDropdown();
+      return;
+    }
     const groups = getItems(filterText);
     
     let html = "";
@@ -132,7 +141,7 @@ function setupCombobox({ inputEl, dropdownEl, getItems, onSelect, onDelete }) {
     renderDropdown();
   });
 
-  dropdownEl.addEventListener("mousedown", (e) => {
+  dropdownEl.addEventListener("pointerdown", (e) => {
     const delBtn = e.target.closest(".item-del-btn");
     if (delBtn) {
       e.preventDefault();
@@ -285,6 +294,653 @@ setupCombobox({
   getItems: getSearchComboboxItems,
   onDelete: deleteSearchHistory,
 });
+
+// ─────────────────────────────────────────────
+// 🏷️ Danbooru タグ オートコンプリート (ComfyUI-Autocomplete-Plus 風)
+// ─────────────────────────────────────────────
+
+// スペース区切り（カンマ不要）で入力・補完を行う要素ID一覧
+const SPACE_SEPARATED_INPUT_IDS = new Set(["b-search"]);
+
+function isSpaceSeparatedInput(inputEl) {
+  return !!(inputEl && SPACE_SEPARATED_INPUT_IDS.has(inputEl.id));
+}
+
+let danbooruTagsData = [];
+let danbooruKnownTagsSet = new Set();
+let isDanbooruTagsLoaded = false;
+let isLoadingDanbooruTags = false;
+
+const DANBOORU_CAT_NAMES = {
+  0: "General",
+  1: "Artist",
+  3: "Copyright",
+  4: "Character",
+  5: "Meta",
+};
+
+function hiraToKata(str) {
+  return (str || "").replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
+}
+
+function kataToHira(str) {
+  return (str || "").replace(/[\u30a1-\u30f6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60));
+}
+
+function formatTagCount(num) {
+  if (!num || isNaN(num)) return "0";
+  if (num >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (num >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(num);
+}
+
+function parseDanbooruCSV(text) {
+  const lines = text.split(/\r?\n/);
+  const result = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    const c1 = line.indexOf(",");
+    if (c1 === -1) continue;
+    const tag = line.substring(0, c1);
+    const c2 = line.indexOf(",", c1 + 1);
+    if (c2 === -1) continue;
+    const cat = parseInt(line.substring(c1 + 1, c2), 10) || 0;
+    const c3 = line.indexOf(",", c2 + 1);
+    let count = 0;
+    let aliasStr = "";
+    if (c3 === -1) {
+      count = parseInt(line.substring(c2 + 1), 10) || 0;
+    } else {
+      count = parseInt(line.substring(c2 + 1, c3), 10) || 0;
+      aliasStr = line.substring(c3 + 1);
+      if (aliasStr.startsWith('"') && aliasStr.endsWith('"')) {
+        aliasStr = aliasStr.slice(1, -1);
+      }
+    }
+    const aliases = aliasStr ? aliasStr.split(",").map(a => a.trim()).filter(Boolean) : [];
+    result.push({
+      tag,
+      category: cat,
+      count,
+      alias: aliases,
+      searchTag: tag.toLowerCase(),
+      searchAliases: aliases.map(a => a.toLowerCase())
+    });
+  }
+  return result;
+}
+
+async function loadDanbooruTags() {
+  if (isDanbooruTagsLoaded || isLoadingDanbooruTags) return;
+  isLoadingDanbooruTags = true;
+  try {
+    const res = await fetch("/data/danbooru_tags.csv");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const csvText = await res.text();
+    danbooruTagsData = parseDanbooruCSV(csvText);
+    danbooruKnownTagsSet = new Set();
+    danbooruTagsData.forEach(t => {
+      danbooruKnownTagsSet.add(t.searchTag);
+      if (t.searchAliases && t.searchAliases.length > 0) {
+        t.searchAliases.forEach(a => danbooruKnownTagsSet.add(a));
+      }
+    });
+
+    isDanbooruTagsLoaded = true;
+    console.log(`[Autocomplete] Loaded ${danbooruTagsData.length} Danbooru tags.`);
+  } catch (err) {
+    console.warn("[Autocomplete] Failed to load Danbooru tags CSV:", err);
+  } finally {
+    isLoadingDanbooruTags = false;
+  }
+}
+
+/**
+ * バッチ検索クエリ内の辞書未登録タグを検出する
+ * 【案C: カンマ有無による条件分け】
+ * - カンマが含まれる場合: カンマをタグ区切りとみなし、各チャンク内の空白はアンダースコア(_)として評価
+ * - カンマが含まれない場合: 空白区切りとし、クォート("..." / '...')内のみアンダースコア(_)として評価
+ * - "-" 除外タグやコロン付きメタタグはスキップ
+ */
+function findUnknownBatchTags(query) {
+  if (!isDanbooruTagsLoaded || danbooruKnownTagsSet.size === 0) return [];
+  if (!query) return [];
+
+  const unknown = [];
+
+  if (query.includes(",")) {
+    // 【カンマ区切りモード】: カンマ単位で分割し、要素内の空白はアンダースコア(_)として評価
+    const chunks = query.split(",").map(c => c.trim()).filter(Boolean);
+    for (let chunk of chunks) {
+      if (chunk.startsWith("-")) continue;
+      if (chunk.includes(":")) {
+        const parts = chunk.split(/[\s\u3000]+/).filter(Boolean);
+        for (let p of parts) {
+          if (p.startsWith("-") || p.includes(":")) continue;
+          let cleanP = p.replace(/^,+|,+$/g, "").trim();
+          if (!cleanP) continue;
+          if (cleanP.startsWith("~")) cleanP = cleanP.slice(1);
+          const norm = cleanP.toLowerCase().replace(/\s+/g, "_");
+          if (!danbooruKnownTagsSet.has(norm)) {
+            unknown.push(cleanP);
+          }
+        }
+        continue;
+      }
+      let cleanChunk = chunk.replace(/^,+|,+$/g, "").trim();
+      if (!cleanChunk) continue;
+      if (cleanChunk.startsWith("~")) cleanChunk = cleanChunk.slice(1);
+      const norm = cleanChunk.toLowerCase().replace(/\s+/g, "_");
+      if (!danbooruKnownTagsSet.has(norm)) {
+        unknown.push(cleanChunk);
+      }
+    }
+  } else {
+    // 【スペース区切りモード】: クォート囲み（"..." / '...'）または空白で分割
+    const tokenRegex = /"([^"]+)"|'([^']+)'|([^\s\u3000]+)/g;
+    let match;
+    while ((match = tokenRegex.exec(query)) !== null) {
+      let rawToken = match[1] || match[2] || match[3] || "";
+      let token = rawToken.trim().replace(/^,+|,+$/g, "").trim();
+      if (!token) continue;
+      if (token.startsWith("-")) continue;
+      if (token.includes(":")) continue;
+      if (token.startsWith("~")) token = token.slice(1);
+      token = token.replace(/^,+|,+$/g, "").trim();
+      if (!token) continue;
+
+      const normalized = token.toLowerCase().replace(/\s+/g, "_");
+      if (!danbooruKnownTagsSet.has(normalized)) {
+        unknown.push(rawToken);
+      }
+    }
+  }
+
+  return unknown;
+}
+
+let tagDropdownEl = null;
+let currentAutocompleteInput = null;
+let activeCandidateIndex = -1;
+let currentSuggestions = [];
+
+function getOrCreateTagDropdown() {
+  if (!tagDropdownEl) {
+    tagDropdownEl = document.createElement("div");
+    tagDropdownEl.className = "tag-autocomplete-dropdown";
+    document.body.appendChild(tagDropdownEl);
+
+    // ドロップダウン外クリック/タップで閉じる
+    document.addEventListener("pointerdown", (e) => {
+      if (tagDropdownEl.classList.contains("active")) {
+        if (!tagDropdownEl.contains(e.target) && (!currentAutocompleteInput || !currentAutocompleteInput.contains(e.target))) {
+          closeTagAutocomplete();
+        }
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (tagDropdownEl.classList.contains("active") && currentAutocompleteInput) {
+        positionTagDropdown(currentAutocompleteInput);
+      }
+    });
+
+    // モバイルの仮想キーボード開閉・ピンチズーム追従
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", () => {
+        if (tagDropdownEl.classList.contains("active") && currentAutocompleteInput) {
+          positionTagDropdown(currentAutocompleteInput);
+        }
+      });
+      window.visualViewport.addEventListener("scroll", () => {
+        if (tagDropdownEl.classList.contains("active") && currentAutocompleteInput) {
+          positionTagDropdown(currentAutocompleteInput);
+        }
+      });
+    }
+  }
+  return tagDropdownEl;
+}
+
+function positionTagDropdown(inputEl) {
+  if (!tagDropdownEl) return;
+  const rect = inputEl.getBoundingClientRect();
+  const isMobile = window.innerWidth <= 600;
+  const dropdownWidth = isMobile ? Math.min(window.innerWidth - 16, 560) : Math.max(340, Math.min(rect.width, 560));
+  
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const dropdownHeight = 290;
+  let top = rect.bottom + window.scrollY + 4;
+  if (spaceBelow < dropdownHeight && rect.top > dropdownHeight) {
+    top = rect.top + window.scrollY - dropdownHeight - 4;
+  }
+
+  let left = isMobile ? 8 : rect.left + window.scrollX;
+  if (!isMobile && left + dropdownWidth > window.innerWidth - 16) {
+    left = window.innerWidth - dropdownWidth - 16;
+  }
+
+  tagDropdownEl.style.top = `${top}px`;
+  tagDropdownEl.style.left = `${Math.max(8, left)}px`;
+  tagDropdownEl.style.width = `${dropdownWidth}px`;
+}
+
+function closeTagAutocomplete() {
+  if (tagDropdownEl) {
+    tagDropdownEl.classList.remove("active");
+    tagDropdownEl.innerHTML = "";
+  }
+  currentSuggestions = [];
+  activeCandidateIndex = -1;
+  currentAutocompleteInput = null;
+}
+
+function getCaretTagInfo(inputEl) {
+  const val = inputEl.value;
+  const cursor = inputEl.selectionStart !== null ? inputEl.selectionStart : val.length;
+  const before = val.substring(0, cursor);
+  const after = val.substring(cursor);
+  const isSpaceSep = isSpaceSeparatedInput(inputEl);
+
+  // 1. クォート内入力の検出（"..." または '...'）
+  const doubleQuotes = (before.match(/"/g) || []).length;
+  const singleQuotes = (before.match(/'/g) || []).length;
+  const inDouble = doubleQuotes % 2 === 1;
+  const inSingle = singleQuotes % 2 === 1;
+
+  if (inDouble || inSingle) {
+    const quoteChar = inDouble ? '"' : "'";
+    const quoteStart = before.lastIndexOf(quoteChar);
+    const relQuoteEnd = after.indexOf(quoteChar);
+    const tokenStart = quoteStart;
+    const tokenEnd = relQuoteEnd === -1 ? val.length : cursor + relQuoteEnd + 1;
+    const tokenInside = val.substring(quoteStart + 1, cursor);
+    const query = tokenInside.trim().replace(/\s+/g, "_").toLowerCase();
+
+    return {
+      tokenStart,
+      tokenEnd,
+      cursor,
+      tokenBeforeCursor: tokenInside,
+      fullToken: val.substring(tokenStart, tokenEnd),
+      query,
+      isQuoted: true,
+      combinedQuery: null,
+      compoundStart: -1
+    };
+  }
+
+  // 【案C: カンマ有無によるモード切り替え】
+  // isSpaceSep対象の入力欄（b-search等）であっても、カンマが使われている場合はカンマ区切りモードとして動作
+  const isCommaMode = !isSpaceSep || before.includes(",") || val.includes(",");
+
+  let tokenStart = 0;
+  let relEnd = -1;
+
+  if (isCommaMode) {
+    // カンマ区切りモード: カンマ（または改行）をセパレータとみなす（スペースはタグ内の単語区切り）
+    const lastSep = Math.max(before.lastIndexOf(","), before.lastIndexOf("\n"));
+    tokenStart = lastSep === -1 ? 0 : lastSep + 1;
+
+    const nextComma = after.indexOf(",");
+    const nextNewline = after.indexOf("\n");
+    if (nextComma !== -1 && nextNewline !== -1) relEnd = Math.min(nextComma, nextNewline);
+    else if (nextComma !== -1) relEnd = nextComma;
+    else if (nextNewline !== -1) relEnd = nextNewline;
+  } else {
+    // スペース区切りモード: 空白（半角・全角）、改行をセパレータとみなす
+    const matchBefore = before.match(/[\s\u3000][^\s\u3000]*$/);
+    tokenStart = matchBefore ? matchBefore.index + 1 : 0;
+
+    const matchAfter = after.match(/[\s\u3000]/);
+    relEnd = matchAfter ? matchAfter.index : -1;
+  }
+
+  const tokenEnd = relEnd === -1 ? val.length : cursor + relEnd;
+
+  const tokenBeforeCursor = val.substring(tokenStart, cursor);
+  const fullToken = val.substring(tokenStart, tokenEnd);
+
+  // 検索はスペースをアンダースコアとする（前後のカンマ・空白を除去）
+  const trimmed = tokenBeforeCursor.replace(/^,+|,+$/g, "").trim();
+  const query = trimmed.replace(/\s+/g, "_").toLowerCase();
+
+  // 直前の単語との複合タグ判定（スペース区切りで、例えば "labia ring" と打った時に "labia_ring" を候補に出す）
+  let combinedQuery = null;
+  let compoundStart = -1;
+  if (!isCommaMode && tokenStart > 0 && query.length > 0) {
+    const textBeforeSep = before.substring(0, tokenStart - 1);
+    const prevMatch = textBeforeSep.match(/(?:^|[\s\u3000,])([^\s\u3000,]+)$/);
+    if (prevMatch) {
+      const prevWord = prevMatch[1].replace(/^,+|,+$/g, "").trim();
+      if (prevWord && !prevWord.includes(":") && !prevWord.startsWith("-")) {
+        combinedQuery = `${prevWord}_${query}`.toLowerCase();
+        compoundStart = tokenStart - 1 - prevMatch[1].length;
+      }
+    }
+  }
+
+  return {
+    tokenStart,
+    tokenEnd,
+    cursor,
+    tokenBeforeCursor,
+    fullToken,
+    query,
+    isQuoted: false,
+    combinedQuery,
+    compoundStart,
+    isCommaMode
+  };
+}
+
+function searchTagsForQuery(query, fullText, limit = 25, combinedQuery = null) {
+  if (!query || query.length === 0 || query.startsWith("#") || query.startsWith("/")) {
+    return [];
+  }
+
+  const q = query.toLowerCase();
+  const qKata = hiraToKata(q);
+  const qHira = kataToHira(q);
+  const cq = combinedQuery ? combinedQuery.toLowerCase() : null;
+
+  // すでに入力済みのタグ（重複チェック・グレーアウト用）
+  const enteredTags = new Set(
+    (fullText || "")
+      .toLowerCase()
+      .split(/[,\n\s\u3000]/)
+      .map(t => t.trim().replace(/^,+|,+$/g, "").replace(/\s+/g, "_"))
+      .filter(Boolean)
+  );
+
+  const matched = [];
+
+  for (let i = 0; i < danbooruTagsData.length; i++) {
+    const t = danbooruTagsData[i];
+    const tag = t.searchTag;
+    let score = 0;
+    let matchedAlias = null;
+    let isCompound = false;
+
+    // 複合クエリ（例: labia_ring）との完全一致・前方一致を最優先判定
+    if (cq && (tag === cq || tag.startsWith(cq))) {
+      score = 3000000000 + (tag === cq ? 100000000 : 0) + t.count;
+      isCompound = true;
+    } else if (tag === q) {
+      score = 2000000000 + t.count;
+    } else if (tag.startsWith(q)) {
+      score = 1000000000 + t.count;
+    } else {
+      for (let j = 0; j < t.searchAliases.length; j++) {
+        const alias = t.searchAliases[j];
+        if (alias === q || alias === qKata || alias === qHira) {
+          score = 1500000000 + t.count;
+          matchedAlias = t.alias[j];
+          break;
+        }
+        if (alias.startsWith(q) || alias.startsWith(qKata) || alias.startsWith(qHira)) {
+          score = 800000000 + t.count;
+          matchedAlias = t.alias[j];
+          break;
+        }
+      }
+
+      if (score === 0) {
+        if (tag.includes(q)) {
+          score = 500000000 + t.count;
+        } else {
+          for (let j = 0; j < t.searchAliases.length; j++) {
+            const alias = t.searchAliases[j];
+            if (alias.includes(q) || alias.includes(qKata) || alias.includes(qHira)) {
+              score = t.count;
+              matchedAlias = t.alias[j];
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (score > 0) {
+      matched.push({
+        tag: t.tag,
+        category: t.category,
+        count: t.count,
+        alias: t.alias,
+        matchedAlias,
+        score,
+        alreadyPresent: enteredTags.has(tag),
+        isCompound
+      });
+    }
+  }
+
+  matched.sort((a, b) => b.score - a.score);
+  return matched.slice(0, limit);
+}
+
+function renderTagDropdown(inputEl, suggestions) {
+  const dropdown = getOrCreateTagDropdown();
+  currentSuggestions = suggestions;
+  currentAutocompleteInput = inputEl;
+  activeCandidateIndex = suggestions.length > 0 ? 0 : -1;
+
+  if (suggestions.length === 0) {
+    closeTagAutocomplete();
+    return;
+  }
+
+  let html = `
+    <div class="tag-autocomplete-header">
+      <span>⚡ DANBOORU TAG AUTOCOMPLETE</span>
+      <span class="hint">↑↓:選択 / Enter,Tab:挿入 / F1:Wiki</span>
+    </div>
+  `;
+
+  suggestions.forEach((item, index) => {
+    const catClass = `cat-${item.category}`;
+    const catName = DANBOORU_CAT_NAMES[item.category] || "General";
+    const countStr = formatTagCount(item.count);
+    const aliasStr = item.matchedAlias 
+      ? `(${escapeHtml(item.matchedAlias)})`
+      : (item.alias && item.alias.length > 0 ? escapeHtml(item.alias.slice(0, 3).join(", ")) : "");
+    const presentClass = item.alreadyPresent ? "already-present" : "";
+    const focusedClass = index === activeCandidateIndex ? "focused" : "";
+
+    html += `
+      <div class="tag-autocomplete-item ${presentClass} ${focusedClass}" data-index="${index}" data-tag="${escapeHtml(item.tag)}">
+        <div class="tag-item-left">
+          <span class="tag-category-badge ${catClass}">${escapeHtml(catName)}</span>
+          <span class="tag-item-name ${catClass}">${escapeHtml(item.tag)}</span>
+          ${aliasStr ? `<span class="tag-item-alias">${aliasStr}</span>` : ""}
+        </div>
+        <div class="tag-item-right">
+          <span class="tag-item-count">${escapeHtml(countStr)}</span>
+          <button type="button" class="tag-item-wiki-btn" title="Danbooru Wikiを開く (F1)" data-wiki="${escapeHtml(item.tag)}">📖</button>
+        </div>
+      </div>
+    `;
+  });
+
+  dropdown.innerHTML = html;
+  positionTagDropdown(inputEl);
+  dropdown.classList.add("active");
+
+  dropdown.querySelectorAll(".tag-autocomplete-item").forEach(itemEl => {
+    itemEl.addEventListener("pointerdown", (e) => {
+      const wikiBtn = e.target.closest(".tag-item-wiki-btn");
+      if (wikiBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const tag = wikiBtn.dataset.wiki;
+        window.open(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}`, "_blank");
+        return;
+      }
+      e.preventDefault();
+      const idx = parseInt(itemEl.dataset.index, 10);
+      if (suggestions[idx]) {
+        applyTagCompletion(inputEl, suggestions[idx].tag, suggestions[idx].isCompound);
+      }
+    });
+  });
+}
+
+function applyTagCompletion(inputEl, tagToInsert, isCompound = false) {
+  const info = getCaretTagInfo(inputEl);
+  const val = inputEl.value;
+  const isSpaceSep = isSpaceSeparatedInput(inputEl);
+
+  // スペースはアンダースコアとする
+  const cleanTag = tagToInsert.trim().replace(/\s+/g, "_");
+
+  // 複合タグ候補（labia_ring）の場合は直前の単語（labia）の位置から置換
+  const replaceStart = (isCompound && info.compoundStart >= 0) ? info.compoundStart : info.tokenStart;
+  const prefix = val.substring(0, replaceStart);
+  const suffix = val.substring(info.tokenEnd);
+
+  const needLeadingSpace = prefix.length > 0 && !prefix.endsWith(" ") && !prefix.endsWith("\n");
+  const lead = needLeadingSpace ? " " : "";
+
+  let tail = "";
+  let newSuffix = suffix;
+
+  const isCommaMode = !isSpaceSep || info.isCommaMode;
+
+  if (!isCommaMode) {
+    // スペース区切りモード: カンマは付加せず、スペース区切りとする
+    const suffixTrimmed = suffix.replace(/^[,\s\u3000]+/, "");
+    tail = " ";
+    newSuffix = suffixTrimmed;
+  } else {
+    // カンマ区切りモード（プロンプト等、またはカンマ使用中の検索欄）
+    const suffixTrimmed = suffix.trimStart();
+    const hasTrailingComma = suffixTrimmed.startsWith(",");
+    tail = hasTrailingComma ? "" : ", ";
+    newSuffix = hasTrailingComma ? suffixTrimmed.replace(/^,\s*/, ", ") : suffix;
+  }
+
+  const replacement = lead + cleanTag + tail;
+  const newVal = prefix + replacement + newSuffix;
+
+  inputEl.value = newVal;
+  const newCursorPos = prefix.length + replacement.length;
+  inputEl.setSelectionRange(newCursorPos, newCursorPos);
+  inputEl.focus();
+  inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+  closeTagAutocomplete();
+}
+
+function updateFocusedTagItem() {
+  if (!tagDropdownEl) return;
+  const items = tagDropdownEl.querySelectorAll(".tag-autocomplete-item");
+  items.forEach((it, idx) => {
+    if (idx === activeCandidateIndex) {
+      it.classList.add("focused");
+      it.scrollIntoView({ block: "nearest" });
+    } else {
+      it.classList.remove("focused");
+    }
+  });
+}
+
+function setupTagAutocomplete(inputEl) {
+  if (!inputEl) return;
+  inputEl.dataset.hasTagAutocomplete = "true";
+
+  function handleTrigger() {
+    if (!isDanbooruTagsLoaded) {
+      loadDanbooruTags();
+      return;
+    }
+    const info = getCaretTagInfo(inputEl);
+    if (!info.query || info.query.length === 0) {
+      closeTagAutocomplete();
+      return;
+    }
+    const suggestions = searchTagsForQuery(info.query, inputEl.value, 25, info.combinedQuery);
+    renderTagDropdown(inputEl, suggestions);
+  }
+
+  inputEl.addEventListener("input", () => {
+    handleTrigger();
+  });
+
+  inputEl.addEventListener("click", () => {
+    handleTrigger();
+  });
+
+  inputEl.addEventListener("keydown", (e) => {
+    const isDropdownOpen = tagDropdownEl && tagDropdownEl.classList.contains("active") && currentAutocompleteInput === inputEl;
+
+    // F1: Wiki表示
+    if (e.key === "F1") {
+      if (isDropdownOpen && activeCandidateIndex >= 0 && currentSuggestions[activeCandidateIndex]) {
+        e.preventDefault();
+        const tag = currentSuggestions[activeCandidateIndex].tag;
+        window.open(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}`, "_blank");
+        return;
+      }
+    }
+
+    // フォーマットショートカット (Alt+Shift+F)
+    if (e.altKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+      e.preventDefault();
+      const isSpaceSep = isSpaceSeparatedInput(inputEl);
+      if (isSpaceSep) {
+        const formatted = (inputEl.value || "")
+          .split(/[\s\u3000,]+/)
+          .map(t => t.trim().replace(/^,+|,+$/g, "").replace(/\s+/g, "_"))
+          .filter(Boolean)
+          .join(" ");
+        inputEl.value = formatted ? formatted + " " : "";
+      } else {
+        const formatted = (inputEl.value || "")
+          .split(/[,\n]+/)
+          .map(t => t.trim().replace(/\s+/g, "_"))
+          .filter(Boolean)
+          .join(", ");
+        inputEl.value = formatted ? formatted + ", " : "";
+      }
+      inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+      closeTagAutocomplete();
+      return;
+    }
+
+    if (!isDropdownOpen) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (currentSuggestions.length > 0) {
+        activeCandidateIndex = (activeCandidateIndex + 1) % currentSuggestions.length;
+        updateFocusedTagItem();
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (currentSuggestions.length > 0) {
+        activeCandidateIndex = (activeCandidateIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+        updateFocusedTagItem();
+      }
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      if (activeCandidateIndex >= 0 && currentSuggestions[activeCandidateIndex]) {
+        e.preventDefault();
+        applyTagCompletion(inputEl, currentSuggestions[activeCandidateIndex].tag, currentSuggestions[activeCandidateIndex].isCompound);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeTagAutocomplete();
+    }
+  });
+
+  inputEl.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (currentAutocompleteInput === inputEl) {
+        closeTagAutocomplete();
+      }
+    }, 200);
+  });
+}
+
 
 
 
@@ -825,8 +1481,48 @@ batchLuckyCheckbox.addEventListener("change", () => {
 
 batchForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  // 前後の余分なカンマ・空白を除去・サニタイズ
+  const rawQuery = batchSearchInput.value.trim();
+  let query = rawQuery;
+
+  if (query.includes(",")) {
+    // 【案C: カンマ区切りモード】各カンマ要素内の空白をアンダースコア(_)に自動正規化
+    const chunks = query.split(",").map(c => c.trim()).filter(Boolean);
+    const normalizedChunks = chunks.map(chunk => {
+      const clean = chunk.replace(/^["']|["']$/g, "").trim();
+      if (clean.includes(":") || clean.startsWith("-")) {
+        return clean.split(/[\s\u3000]+/).map(p => {
+          if (p.includes(":") || p.startsWith("-")) return p;
+          return p.replace(/\s+/g, "_");
+        }).join(" ");
+      }
+      return clean.replace(/\s+/g, "_");
+    });
+    query = normalizedChunks.join(", ");
+  } else {
+    // 【案C: スペース区切りモード】クォート囲みフレーズ（例: "labia ring"）をアンダースコア形式に正規化
+    query = query.replace(/["']([^"']+)["']/g, (m, phrase) => {
+      return phrase.trim().replace(/\s+/g, "_");
+    });
+  }
+
+  query = query.replace(/^[,\s\u3000]+|[,\s\u3000]+$/g, "").trim();
+  if (query !== rawQuery) {
+    batchSearchInput.value = query;
+  }
+
+  // 🏷️ 辞書未登録タグ（スペルミス候補）の確認ポップアップ
+  // （"-" 除外タグやコロン付きメタタグはチェック対象外）
+  const unknownTags = findUnknownBatchTags(query);
+  if (unknownTags.length > 0) {
+    const listStr = unknownTags.map(t => `・${t}`).join("\n");
+    const confirmed = window.confirm(`${MSG_UNKNOWN_BATCH_TAGS_WARN}${listStr}`);
+    if (!confirmed) {
+      return;
+    }
+  }
+
   batchStartBtn.disabled = true;
-  const query = batchSearchInput.value.trim();
   saveSearchHistory(query);
 
   const batchArtistParams = resolveArtistInput(bArtistInput ? bArtistInput.value : "");
@@ -1636,19 +2332,45 @@ document.addEventListener("click", (e) => {
   const targetTab = ["generate", "gallery", "settings"].includes(hash) ? hash : (savedTab || "generate");
   switchTab(targetTab);
 
-  // ギャラリーと主要UIの初期化を最優先で並列実行し、描画ブロックを防ぐ
-  await Promise.all([
-    resetGallery(),
-    loadHeroines(),
-    loadHeroinesDetails(),
-    loadBackends(),
-  ]);
+  try {
+    // 主要データを先に読み込む
+    await Promise.all([
+      loadHeroines(),
+      loadHeroinesDetails(),
+      loadBackends(),
+    ]);
+
+    // データが揃ってからギャラリーを描画する
+    await resetGallery();
+  } catch (err) {
+    console.error("Init Error:", err);
+    alert("初期化エラー: " + err.message);
+  }
 
   // 設定系やステータスポーリングはバックグラウンドで非同期読み込み
   loadPurgeTags();
   loadBackups();
   loadNotificationConfig();
   loadSiteAuthConfig();
+  loadDanbooruTags();
+
+  // 🏷️ Danbooru タグ オートコンプリートのバインド
+  const autocompleteTargetIds = [
+    "f-prompt",
+    "b-search",
+    "user-purge-input",
+    "hm-identity",
+    "hm-face",
+    "hm-body",
+    "hm-costume",
+    "hm-series",
+    "hm-negative"
+  ];
+  autocompleteTargetIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) setupTagAutocomplete(el);
+  });
+
   loadComfyStatus().then(() => {
     setInterval(loadComfyStatus, COMFY_STATUS_POLL_MS);
   });

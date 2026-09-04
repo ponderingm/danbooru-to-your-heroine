@@ -5,6 +5,7 @@ src/config.yaml
 # 生成物・進捗・ルール・バックアップファイル
 database/*.json
 database/*.yaml
+database/*.csv
 database/backups/
 !database/.gitkeep
 

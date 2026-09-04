@@ -1,4 +1,4 @@
-# Copilot Instructions — danbooru_yukikaze_tool (v2.0)
+# Copilot Instructions — danbooru-to-your-heroine (v2.0)
 
 このリポジトリはPublic公開を前提とする。AIコーディングエージェントは以下のルールを必ず守ること。
 

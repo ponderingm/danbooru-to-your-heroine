@@ -57,6 +57,7 @@ import urllib.parse
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -583,7 +584,7 @@ def _batch_fetch_posts(provider: str, query: str, page: int, limit: int, lucky: 
     elif provider == "aibooru":
         headers = {"User-Agent": "danbooru-to-your-heroine/2.0"}
         params = {"tags": query, "limit": limit, "page": page}
-        resp = requests.get("https://aibooru.online/posts.json", params=params, headers=headers, timeout=15)
+        resp = requests.get("https://aibooru.online/posts.json", params=params, headers=headers, timeout=30)
         if resp.status_code == 200:
             posts = resp.json()
             return posts if isinstance(posts, list) else []
@@ -599,7 +600,7 @@ def _batch_fetch_posts(provider: str, query: str, page: int, limit: int, lucky: 
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         pid = max(0, page - 1)
         url = f"https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&tags={urllib.parse.quote(query)}&limit={limit}&pid={pid}&user_id={user_id}&api_key={api_key}"
-        resp = requests.get(url, headers=headers, timeout=15)
+        resp = requests.get(url, headers=headers, timeout=30)
         if resp.status_code == 200:
             data = resp.json()
             posts = data.get("post") if isinstance(data, dict) else data
@@ -661,6 +662,21 @@ def list_tags():
             counts[tag] = counts.get(tag, 0) + 1
     tags = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return {"tags": [{"tag": t, "count": c} for t, c in tags]}
+
+
+@app.api_route("/data/danbooru_tags.csv", methods=["GET", "HEAD"])
+def get_danbooru_tags_csv():
+    """Danbooruタグのオートコンプリート用CSVデータを配信する（未取得時は自動ダウンロード）"""
+    csv_path = os.path.join(PROJECT_ROOT, "database", "danbooru_tags.csv")
+    if not os.path.exists(csv_path):
+        import urllib.request
+        url = "https://huggingface.co/datasets/newtextdoc1111/danbooru-tag-csv/resolve/main/danbooru_tags.csv"
+        try:
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+            urllib.request.urlretrieve(url, csv_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to download tags CSV: {e}")
+    return FileResponse(csv_path, media_type="text/csv", headers={"Cache-Control": "public, max-age=86400"})
 
 
 class PostIdsRequest(BaseModel):
@@ -727,7 +743,7 @@ def _batch_status_snapshot() -> dict:
         return dict(BATCH_STATE)
 
 
-def _batch_worker_loop(cfg: BatchConfig) -> None:
+def _batch_worker_loop(cfg: BatchConfig, run_id: str) -> None:
     provider = getattr(cfg, "provider", "danbooru") or "danbooru"
     search = cfg.search
     if cfg.rating and "rating:" not in search:
@@ -776,18 +792,18 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
     try:
         while True:
             with BATCH_LOCK:
-                if BATCH_STATE["stop_requested"]:
+                if BATCH_STATE["stop_requested"] or BATCH_STATE.get("run_id") != run_id:
                     break
             try:
                 if cfg.lucky:
-                    page += 1
-                    posts = _batch_fetch_posts(provider, lucky_tags, page=page, limit=cfg.page_size, lucky=True)
+                    posts = _batch_fetch_posts(provider, lucky_tags, page=1, limit=cfg.page_size, lucky=True)
                 else:
                     page += 1
                     posts = _batch_fetch_posts(provider, api_query, page=page, limit=cfg.page_size, lucky=False)
             except Exception as e:
                 with BATCH_LOCK:
-                    BATCH_STATE["last_error"] = f"検索エラー ({provider}): {e}"
+                    if BATCH_STATE.get("run_id") == run_id:
+                        BATCH_STATE["last_error"] = f"検索エラー ({provider}): {e}"
                 time.sleep(10)
                 continue
 
@@ -804,12 +820,13 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
             new_in_round = 0
             for post in posts:
                 with BATCH_LOCK:
-                    if BATCH_STATE["stop_requested"]:
+                    if BATCH_STATE["stop_requested"] or BATCH_STATE.get("run_id") != run_id:
                         break
                 post_id = post.get("id")
                 with BATCH_LOCK:
-                    BATCH_STATE["current_post_id"] = post_id
-                    BATCH_STATE["total_checked"] += 1
+                    if BATCH_STATE.get("run_id") == run_id:
+                        BATCH_STATE["current_post_id"] = post_id
+                        BATCH_STATE["total_checked"] += 1
 
                 post_key = f"{provider}:{post_id}"
                 post_url = _batch_post_url(provider, post_id)
@@ -843,6 +860,11 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                 # NOTE: _prune_jobs_locked() で job_id が削除される場合があるため KeyError を明示的に補足する
                 while True:
                     time.sleep(0.5)
+                    with BATCH_LOCK:
+                        if BATCH_STATE["stop_requested"] or BATCH_STATE.get("run_id") != run_id:
+                            status = "aborted"
+                            error = "強制終了"
+                            break
                     with JOBS_LOCK:
                         job = JOBS.get(job_id)
                     if job is None:
@@ -855,17 +877,21 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                     if status in ("done", "error"):
                         break
 
+                if status == "aborted":
+                    break
+
                 seen_keys.add(post_key)
                 seen_keys.add(str(post_id))
                 seen_keys.add(post_url)
 
                 with BATCH_LOCK:
-                    if status == "done":
-                        BATCH_STATE["total_generated"] += 1
-                        consecutive_failures = 0
-                    else:
-                        BATCH_STATE["last_error"] = error
-                        consecutive_failures += 1
+                    if BATCH_STATE.get("run_id") == run_id:
+                        if status == "done":
+                            BATCH_STATE["total_generated"] += 1
+                            consecutive_failures = 0
+                        else:
+                            BATCH_STATE["last_error"] = error
+                            consecutive_failures += 1
 
                 if consecutive_failures >= max_consecutive_failures:
                     notify_failure(
@@ -874,7 +900,8 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
                         f"（ComfyUIがダウンしている可能性）。最後のエラー: {error}",
                     )
                     with BATCH_LOCK:
-                        BATCH_STATE["stop_requested"] = True
+                        if BATCH_STATE.get("run_id") == run_id:
+                            BATCH_STATE["stop_requested"] = True
                     break
 
                 time.sleep(cfg.interval_sec)
@@ -888,12 +915,14 @@ def _batch_worker_loop(cfg: BatchConfig) -> None:
         print(f"[BATCH] ワーカースレッドが予期しない例外で終了: {e}")
         notify_failure("バッチワーカー異常終了", str(e))
         with BATCH_LOCK:
-            BATCH_STATE["last_error"] = f"ワーカー異常終了: {e}"
+            if BATCH_STATE.get("run_id") == run_id:
+                BATCH_STATE["last_error"] = f"ワーカー異常終了: {e}"
     finally:
         with BATCH_LOCK:
-            BATCH_STATE["running"] = False
-            BATCH_STATE["current_post_id"] = None
-            BATCH_STATE["stop_requested"] = False
+            if BATCH_STATE.get("run_id") == run_id:
+                BATCH_STATE["running"] = False
+                BATCH_STATE["current_post_id"] = None
+                BATCH_STATE["stop_requested"] = False
 
 
 @app.post("/batch/start")
@@ -909,6 +938,9 @@ def batch_start(cfg: BatchConfig):
                 detail="Gelbooruをプロバイダに指定する場合、設定タブでGelbooru User IDとAPI Keyの登録が必須となります。"
             )
 
+    import uuid
+    run_id = uuid.uuid4().hex
+
     with BATCH_LOCK:
         if BATCH_STATE["running"]:
             raise HTTPException(status_code=409, detail="batch is already running; call /batch/stop first")
@@ -921,8 +953,9 @@ def batch_start(cfg: BatchConfig):
             "total_generated": 0,
             "last_error": None,
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "run_id": run_id,
         })
-    threading.Thread(target=_batch_worker_loop, args=(cfg,), daemon=True).start()
+    threading.Thread(target=_batch_worker_loop, args=(cfg, run_id), daemon=True).start()
     return _batch_status_snapshot()
 
 
@@ -953,7 +986,7 @@ def batch_status():
 
 
 @app.get("/backends")
-def get_backends(health: bool = False):
+def get_backends(health: bool = True):
     """config.GENERATION_BACKENDSの一覧（Web UIのプルダウン用）。
     health=true の場合のみ各バックエンドのComfyUI生存確認を行う（初期表示用の高速レスポンスと分離）。
     """
@@ -964,7 +997,7 @@ def get_backends(health: bool = False):
         result = []
         for bid, b in backends.items():
             url = b.get("comfy_url", COMFYUI_URL)
-            online = check_comfy_online(url)
+            online = check_comfy_online(url, timeout=1.0)
             result.append({"id": bid, "label": b.get("label", bid), "online": online})
 
         # コンフィグのデフォルトがオンラインならそのまま使う。

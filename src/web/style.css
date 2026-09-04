@@ -980,6 +980,245 @@ button.danger {
   text-align: center;
 }
 
+/* ─────────────────────────────────────────────
+   🏷️ Danbooru タグ オートコンプリート (Autocomplete-Plus 風)
+   ───────────────────────────────────────────── */
+:root {
+  --cat-general: #29b6f6;
+  --cat-artist: #ff9800;
+  --cat-copyright: #e040fb;
+  --cat-character: #00e676;
+  --cat-meta: #ffca28;
+  --cat-unknown: #a0a0b0;
+}
+
+.tag-autocomplete-dropdown {
+  position: absolute;
+  background: #141724;
+  border: 1px solid #333852;
+  border-radius: 8px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(121, 255, 225, 0.25);
+  max-height: 290px;
+  min-width: 320px;
+  max-width: 580px;
+  overflow-y: auto;
+  z-index: 99999;
+  display: none;
+  padding: 4px 0;
+  font-family: inherit;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.tag-autocomplete-dropdown.active {
+  display: block;
+}
+
+.tag-autocomplete-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  font-weight: 600;
+}
+
+.tag-autocomplete-header span.hint {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.tag-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.12s, border-left-color 0.12s;
+  border-left: 3px solid transparent;
+  user-select: none;
+}
+
+.tag-autocomplete-item:hover,
+.tag-autocomplete-item.focused {
+  background: rgba(121, 255, 225, 0.12);
+  border-left-color: #79ffe1;
+}
+
+.tag-autocomplete-item.already-present {
+  opacity: 0.5;
+}
+
+.tag-autocomplete-item.already-present .tag-item-name::after {
+  content: " ✓済";
+  font-size: 0.7rem;
+  color: #79ffe1;
+  margin-left: 4px;
+}
+
+.tag-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tag-category-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.tag-item-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.tag-item-alias {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  opacity: 0.85;
+}
+
+.tag-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tag-item-count {
+  font-size: 0.74rem;
+  font-family: monospace;
+  color: #8fa0b5;
+  font-weight: 600;
+}
+
+.tag-item-wiki-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: opacity 0.15s, transform 0.15s, background 0.15s;
+  line-height: 1;
+  color: inherit;
+}
+
+.tag-item-wiki-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(1.15);
+}
+
+/* Category Colors */
+.cat-0, .cat-general {
+  color: var(--cat-general);
+}
+.tag-category-badge.cat-0, .tag-category-badge.cat-general {
+  background: rgba(41, 182, 246, 0.2);
+  color: var(--cat-general);
+}
+
+.cat-1, .cat-artist {
+  color: var(--cat-artist);
+}
+.tag-category-badge.cat-1, .tag-category-badge.cat-artist {
+  background: rgba(255, 152, 0, 0.2);
+  color: var(--cat-artist);
+}
+
+.cat-3, .cat-copyright {
+  color: var(--cat-copyright);
+}
+.tag-category-badge.cat-3, .tag-category-badge.cat-copyright {
+  background: rgba(224, 64, 251, 0.2);
+  color: var(--cat-copyright);
+}
+
+.cat-4, .cat-character {
+  color: var(--cat-character);
+}
+.tag-category-badge.cat-4, .tag-category-badge.cat-character {
+  background: rgba(0, 230, 118, 0.2);
+  color: var(--cat-character);
+}
+
+.cat-5, .cat-meta {
+  color: var(--cat-meta);
+}
+.tag-category-badge.cat-5, .tag-category-badge.cat-meta {
+  background: rgba(255, 202, 40, 0.2);
+  color: var(--cat-meta);
+}
+
+/* ─────────────────────────────────────────────
+   📱 モバイル・スマホ最適化（タップズレ防止＆自動ズーム防止）
+   ───────────────────────────────────────────── */
+
+/* タップ操作のディレイ（300ms）およびタップ位置ブレ防止 */
+button,
+.tab-btn,
+.tag-autocomplete-item,
+.combobox-item,
+select,
+input,
+textarea {
+  touch-action: manipulation;
+}
+
+/* iOS Safari自動ズーム防止: 16px未満だとフォーカス時に強制ズームされ、タップ判定が下へズレる */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea,
+  #form input[type="url"],
+  #form textarea,
+  .regen-prompt {
+    font-size: 16px !important;
+  }
+
+  header {
+    padding: 10px 16px 0;
+  }
+
+  main {
+    padding: 0 12px 32px;
+  }
+
+  .panel {
+    padding: 14px 16px;
+  }
+
+  /* ドロップダウンがスマホ画面幅を超えてズレないよう調整 */
+  .tag-autocomplete-dropdown {
+    max-width: calc(100vw - 16px) !important;
+    min-width: 280px !important;
+  }
+}
+
+
+
 
 
 

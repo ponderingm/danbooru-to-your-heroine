@@ -10,7 +10,7 @@ DanbooruのURLからタグを収集し、キャラクター特性を config.py �
 Usage:
     uv run python danbooru_to_heroine.py <danbooru_url>
     uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345
-    uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345 --heroine rinko
+    uv run python danbooru_to_heroine.py https://danbooru.donmai.us/posts/12345 --heroine example_heroine
 """
 
 import re
@@ -360,6 +360,13 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
 
 
 
+def escape_tag_parentheses(tag: str) -> str:
+    """Danbooruタグ等の未エスケープ丸括弧を \\( \\) にエスケープする"""
+    tag = re.sub(r'(?<!\\)\(', r'\(', tag)
+    tag = re.sub(r'(?<!\\)\)', r'\)', tag)
+    return tag
+
+
 def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list = None) -> str:
     if quality_prefix is None:
         quality_prefix = ["masterpiece", "best quality", "highly detailed"]
@@ -377,10 +384,11 @@ def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list
     seen = set()
     deduped = []
     for p in parts:
-        key = p.lower()
+        escaped_p = escape_tag_parentheses(p)
+        key = escaped_p.lower()
         if key not in seen:
             seen.add(key)
-            deduped.append(p)
+            deduped.append(escaped_p)
 
     return ", ".join(deduped)
 

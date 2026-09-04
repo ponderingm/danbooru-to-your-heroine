@@ -90,18 +90,28 @@ def resolve_backend(backend_id: str = None) -> dict:
     if backend_id not in backends:
         backend_id = getattr(config, "DEFAULT_BACKEND", None)
     backend = backends.get(backend_id, {})
+    wf = backend.get("workflow", "default")
+    is_anima = (wf == "anima")
+    default_steps = ANIMA_STEPS if is_anima else CUSTOM_STEPS
+    default_cfg = ANIMA_CFG if is_anima else CUSTOM_CFG
+    default_sampler = ANIMA_SAMPLER if is_anima else CUSTOM_SAMPLER
+    default_scheduler = ANIMA_SCHEDULER if is_anima else CUSTOM_SCHEDULER
+
     return {
         "id": backend_id,
         "label": backend.get("label", backend_id or ""),
-        "model": backend.get("model", "illustrious"),
-        "workflow": backend.get("workflow", "default"),
-        "comfy_url": backend.get("comfy_url", COMFYUI_URL),
+        "model": backend.get("model", "anima" if is_anima else "illustrious"),
+        "workflow": wf,
+        "comfy_url": backend.get("comfy_url", ANIMA_COMFY_URL if is_anima else COMFYUI_URL),
         "checkpoint": backend.get("checkpoint") or config.DEFAULT_CHECKPOINT,
         "lora_name": backend.get("lora_name", CUSTOM_LORA_NAME),
-        "steps": backend.get("steps", CUSTOM_STEPS),
-        "cfg": backend.get("cfg", CUSTOM_CFG),
-        "sampler": backend.get("sampler", CUSTOM_SAMPLER),
-        "scheduler": backend.get("scheduler", CUSTOM_SCHEDULER),
+        "unet_name": backend.get("unet_name", ANIMA_UNET_NAME),
+        "clip_name": backend.get("clip_name", ANIMA_CLIP_NAME),
+        "vae_name": backend.get("vae_name", ANIMA_VAE_NAME),
+        "steps": backend.get("steps", default_steps),
+        "cfg": backend.get("cfg", default_cfg),
+        "sampler": backend.get("sampler", default_sampler),
+        "scheduler": backend.get("scheduler", default_scheduler),
     }
 
 
@@ -155,21 +165,37 @@ def create_custom_workflow(prompt_text: str, negative_text: str, filename_prefix
 
 
 def create_anima_workflow(prompt_text: str, negative_text: str, filename_prefix: str,
-                           width: int = 832, height: int = 1216, seed: int = None) -> dict:
+                           width: int = 832, height: int = 1216, seed: int = None,
+                           unet_name: str = None, clip_name: str = None, vae_name: str = None,
+                           steps: int = None, cfg: float = None, sampler: str = None, scheduler: str = None) -> dict:
     """Anima v1.0 DiT向けワークフロー。SDXL checkpointは使わず、UNETLoader/CLIPLoader/VAELoaderで構成する"""
     if seed is None:
         seed = random.randint(100000, 99999999)
+    if unet_name is None:
+        unet_name = ANIMA_UNET_NAME
+    if clip_name is None:
+        clip_name = ANIMA_CLIP_NAME
+    if vae_name is None:
+        vae_name = ANIMA_VAE_NAME
+    if steps is None:
+        steps = ANIMA_STEPS
+    if cfg is None:
+        cfg = ANIMA_CFG
+    if sampler is None:
+        sampler = ANIMA_SAMPLER
+    if scheduler is None:
+        scheduler = ANIMA_SCHEDULER
     return {
-        "1": {"inputs": {"unet_name": ANIMA_UNET_NAME, "weight_dtype": "default"}, "class_type": "UNETLoader"},
-        "2": {"inputs": {"clip_name": ANIMA_CLIP_NAME, "type": "qwen_image"}, "class_type": "CLIPLoader"},
-        "3": {"inputs": {"vae_name": ANIMA_VAE_NAME}, "class_type": "VAELoader"},
+        "1": {"inputs": {"unet_name": unet_name, "weight_dtype": "default"}, "class_type": "UNETLoader"},
+        "2": {"inputs": {"clip_name": clip_name, "type": "qwen_image"}, "class_type": "CLIPLoader"},
+        "3": {"inputs": {"vae_name": vae_name}, "class_type": "VAELoader"},
         "4": {"inputs": {"width": width, "height": height, "batch_size": 1}, "class_type": "EmptyLatentImage"},
         "5": {"inputs": {"text": prompt_text, "clip": ["2", 0]}, "class_type": "CLIPTextEncode"},
         "6": {"inputs": {"text": negative_text, "clip": ["2", 0]}, "class_type": "CLIPTextEncode"},
         "7": {
             "inputs": {
-                "seed": seed, "steps": ANIMA_STEPS, "cfg": ANIMA_CFG,
-                "sampler_name": ANIMA_SAMPLER, "scheduler": ANIMA_SCHEDULER, "denoise": 1.0,
+                "seed": seed, "steps": steps, "cfg": cfg,
+                "sampler_name": sampler, "scheduler": scheduler, "denoise": 1.0,
                 "model": ["1", 0], "positive": ["5", 0], "negative": ["6", 0], "latent_image": ["4", 0],
             },
             "class_type": "KSampler",
@@ -188,6 +214,13 @@ def build_workflow_for_backend(backend: dict, prompt_text: str, negative_text: s
         return create_anima_workflow(
             prompt_text=prompt_text, negative_text=negative_text, filename_prefix=filename_prefix,
             width=width, height=height, seed=seed,
+            unet_name=backend.get("unet_name"),
+            clip_name=backend.get("clip_name"),
+            vae_name=backend.get("vae_name"),
+            steps=backend.get("steps"),
+            cfg=backend.get("cfg"),
+            sampler=backend.get("sampler"),
+            scheduler=backend.get("scheduler"),
         )
     if workflow == "custom":
         return create_custom_workflow(

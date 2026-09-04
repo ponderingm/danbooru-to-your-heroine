@@ -79,7 +79,7 @@ def notify_success(
     embed = {
         "title": f"⚡ 生成完了: {heroine}{time_text}",
         "description": "\n".join(desc_lines),
-        "color": 0x7928CA,  # 紫（対魔忍・ゆきかぜカラー）
+        "color": 0x7928CA,  # アクセントカラー（パープル）
     }
 
     # 画像添付のハンドリング

@@ -12,7 +12,7 @@ COPY src/ ./src/
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
-EXPOSE 8000
+EXPOSE 8899
 
-# src/config.py は .dockerignore で除外されているため、実行時にボリュームマウントすること
+# src/config.yaml は .dockerignore で除外されているため、実行時にボリュームマウントすること
 CMD ["python", "src/server.py"]

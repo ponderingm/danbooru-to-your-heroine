@@ -58,6 +58,18 @@ backends:
     cfg: 1.5
     sampler: "euler"
     scheduler: "sgm_uniform"
+  anima_turbo_slow:
+    label: "Anima Turbo（低速機）"
+    model: "anima"
+    workflow: "anima"
+    comfy_url: "http://127.0.0.1:8189"
+    unet_name: "your_anima_turbo.safetensors"
+    clip_name: "qwen_3_06b_base.safetensors"
+    vae_name: "qwen_image_vae.safetensors"
+    steps: 10
+    cfg: 1.0
+    sampler: "euler"
+    scheduler: "normal"
 
 default_backend: "illustrious_fast"
 

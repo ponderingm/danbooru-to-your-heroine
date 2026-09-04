@@ -4,12 +4,12 @@ services:
     image: danbooru-to-your-heroine
     # ComfyUIがホスト(127.0.0.1)やLAN内で動いている場合、host networkが最も簡単（Linux専用）。
     # Mac/Windows等host network非対応の環境では下のnetwork_modeを削除し、
-    # ports: ["8000:8000"] を有効化した上でconfig.API_HOSTを"0.0.0.0"にすること。
+    # ports: ["8899:8899"] を有効化した上でconfig.yamlのapi_hostを"0.0.0.0"にすること。
     network_mode: host
     volumes:
-      - ./src/config.py:/app/src/config.py:ro
+      - ./src/config.yaml:/app/src/config.yaml:ro
       - ./database:/app/database
-      # config.pyのOUTPUT_DIR/WEB_OUTPUT_DIRと同じ絶対パスでホスト側ディレクトリをマウントする（例）
-      # - /mnt/external_hdd/yukikaze_generated:/mnt/external_hdd/yukikaze_generated
-      # - /home/pi/my_website/prompts/generated:/home/pi/my_website/prompts/generated
+      # config.yamlのoutput_dir/web_output_dirと同じ絶対パスでホスト側ディレクトリをマウントする（例）
+      # - /mnt/external_hdd/generated_images:/mnt/external_hdd/generated_images
     restart: unless-stopped
+

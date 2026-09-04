@@ -60,6 +60,7 @@ artifact_purge:
   - heart censor
   - novelty censor
   - shadow censor
+  - censored nipples
   - sparkle censor
   - artist name
   - copyright name
@@ -83,6 +84,7 @@ artifact_purge:
   - japanese text
   - alt text
   - sample text
+  - pixel art
 
 # 品質タグ（モデル標準やプロンプト構築時に制御）
 

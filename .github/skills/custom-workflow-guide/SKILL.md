@@ -1,6 +1,6 @@
 ---
 name: custom-workflow-guide
-description: ComfyUIのAPI Format JSONからdanbooru_yukikaze_toolのワークフロー辞書（src/comfy_client.py）を作成・改造する手順。新しいバックエンド（LoRA構成・別モデル等）を追加したい、または既存のcustomワークフローが何をしているか理解したい場合に使用する。
+description: ComfyUIのAPI Format JSONからdanbooru-to-your-heroineのワークフロー辞書（src/comfy_client.py）を作成・改造する手順。新しいバックエンド（LoRA構成・別モデル等）を追加したい、または既存のcustomワークフローが何をしているか理解したい場合に使用する。
 ---
 
 # Custom Workflow Guide
