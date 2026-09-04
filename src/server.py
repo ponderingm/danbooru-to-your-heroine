@@ -296,6 +296,28 @@ def analyze_heroine_tags(req: AnalyzeHeroineRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class NaturalSearchRequest(BaseModel):
+    query: str
+    provider: Optional[str] = "auto"
+    find_core: Optional[bool] = False
+
+
+@app.post("/search/natural")
+def natural_search_tags(req: NaturalSearchRequest):
+    """自然言語からBooruタグを変換し、Gelbooru積集合から共起の輪の中心核（起爆剤タグ）を探索"""
+    from natural_to_danbooru import resolve_tags
+    try:
+        res = resolve_tags(
+            text=req.query,
+            provider=req.provider or "auto",
+            find_core=bool(req.find_core),
+        )
+        return {"status": "ok", **res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
 class SaveHeroineRequest(BaseModel):
     key: str
     data: dict
