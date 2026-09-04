@@ -56,14 +56,56 @@ def fetch_gelbooru_intersection_posts(
     return []
 
 
+def fetch_danbooru_tag_counts(tags: List[str]) -> Dict[str, int]:
+    """
+    Danbooru APIから複数タグのグローバル総登録件数（post_count）を一括取得する。
+    登録件数が少ない（希少である）ほど高い情報量（特異性）を持つ。
+    """
+    if not tags:
+        return {}
+    
+    headers = {"User-Agent": "danbooru-to-your-heroine/2.0"}
+    login = getattr(config, "DANBOORU_LOGIN", None)
+    api_key = getattr(config, "DANBOORU_API_KEY", None)
+    
+    # tags[name_comma] で最大100件まで一括問い合わせ可能
+    tag_meta = {}
+    chunk_size = 50
+    for i in range(0, len(tags), chunk_size):
+        chunk = tags[i:i + chunk_size]
+        query_str = ",".join(chunk)
+        params = {"search[name_comma]": query_str, "limit": len(chunk)}
+        if login and api_key:
+            params["login"] = login
+            params["api_key"] = api_key
+        try:
+            resp = requests.get("https://danbooru.donmai.us/tags.json", params=params, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for item in data:
+                        name = item.get("name")
+                        count = item.get("post_count", 0)
+                        cat = item.get("category", 0)
+                        if name:
+                            tag_meta[name] = {"post_count": count, "category": cat}
+        except Exception:
+            continue
+
+    return tag_meta
+
+
 def analyze_cooccurrence_core(
     posts: List[Dict[str, Any]],
     input_tags: List[str],
     top_k: int = 10,
+    check_rarity: bool = True,
 ) -> Dict[str, Any]:
     """
-    母集団投稿のタグ共起頻度および関連度を解析し、
+    母集団投稿のタグ共起頻度および希少度（特異性）を解析し、
     共起の輪（xxxxx ring）の中心核となる「起爆剤タグ」候補を特定する。
+    「登録件数が少ないニッチなタグほど美しい」という思想に基づき、
+    母集団内での共起率 × 特異性（逆頻度IDF相当）でスコアリングする。
     """
     input_tag_set = {t.strip().replace(" ", "_").lower() for t in input_tags if t.strip()}
     total_posts = len(posts)
@@ -71,7 +113,6 @@ def analyze_cooccurrence_core(
         return {
             "total_posts": 0,
             "core_candidates": [],
-            "all_cooccurring_tags": [],
         }
 
     tag_counts = Counter()
@@ -86,23 +127,59 @@ def analyze_cooccurrence_core(
                 continue
             tag_counts[norm_t] += 1
 
-    # 出現頻度（採用率%）と共起スコアの計算
-    candidates = []
-    for tag, count in tag_counts.most_common(50):
-        ratio = round((count / total_posts) * 100, 1)
-        # 短すぎるタグやノイズを除外
+    # 上位候補の抽出（出現回数が2回以上のものを対象）
+    initial_candidates = []
+    for tag, count in tag_counts.most_common(60):
+        if count < 2:
+            continue
         if len(tag) <= 2:
             continue
-        candidates.append({
+        initial_candidates.append((tag, count))
+
+    # Danbooruでのグローバル登録件数（希少度）を取得
+    rarity_map = {}
+    if check_rarity and initial_candidates:
+        candidate_tags = [t for t, _ in initial_candidates]
+        rarity_map = fetch_danbooru_tag_counts(candidate_tags)
+
+    scored_candidates = []
+    # Danbooru全体総投稿数の目安スケール（約8,000,000）
+    TOTAL_BOORU_SCALE = 8_000_000
+
+    for tag, local_count in initial_candidates:
+        meta = rarity_map.get(tag, {"post_count": 100_000, "category": 0})
+        global_count = meta.get("post_count", 100_000)
+        category = meta.get("category", 0)
+        
+        # カテゴリ分類: 0=一般, 1=絵師, 3=作品, 4=キャラクター, 5=メタ
+        # 共起の核（シチュエーション・装飾・フェチ）としては一般タグ（0）を最優先する
+        if category in (1, 3, 4, 5):
+            continue
+
+        local_ratio = local_count / total_posts
+        
+        # 特異性スコア: ローカル共起率 × IDF^1.5
+        # グローバル件数が少ないタグ（例: 200件の labia_ring）ほどスコアが跳ね上がる
+        import math
+        idf_weight = max(1.0, math.log(TOTAL_BOORU_SCALE / max(10, global_count)))
+        rarity_score = round(local_ratio * 100 * (idf_weight ** 1.5), 2)
+
+        scored_candidates.append({
             "tag": tag,
-            "count": count,
-            "frequency_percent": ratio,
+            "local_count": local_count,
+            "frequency_percent": round(local_ratio * 100, 1),
+            "global_post_count": global_count,
+            "category": category,
+            "rarity_score": rarity_score,
         })
+
+    # 特異性スコア順にソート（希少で美しい中心核タグが首位に来る）
+    scored_candidates.sort(key=lambda x: x["rarity_score"], reverse=True)
 
     return {
         "total_posts_analyzed": total_posts,
         "input_tags": list(input_tag_set),
-        "core_candidates": candidates[:top_k],
+        "core_candidates": scored_candidates[:top_k],
     }
 
 
@@ -112,10 +189,12 @@ def find_cooccurrence_ring(
     rating: Optional[str] = None,
     sort: str = "score",
     top_k: int = 5,
+    check_rarity: bool = True,
 ) -> Dict[str, Any]:
     """
-    ワンストップAPI: 複数タグのGelbooru積集合から共起の輪の中心を特定する。
+    ワンストップAPI: 複数タグのGelbooru積集合から、希少性の高い共起の輪の中心を特定する。
     """
     posts = fetch_gelbooru_intersection_posts(tags=tags, limit=limit, rating=rating, sort=sort)
-    analysis = analyze_cooccurrence_core(posts, input_tags=tags, top_k=top_k)
+    analysis = analyze_cooccurrence_core(posts, input_tags=tags, top_k=top_k, check_rarity=check_rarity)
     return analysis
+

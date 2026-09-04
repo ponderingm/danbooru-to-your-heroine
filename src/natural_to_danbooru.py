@@ -172,9 +172,10 @@ def main():
         else:
             print(result["query_string"])
             if result.get("cooccurrence_ring") and result["cooccurrence_ring"].get("core_candidates"):
-                print("\n[共起の輪の中心核候補 (xxxxx ring)]:")
+                print("\n[共起の輪の中心核候補 (xxxxx ring / 希少特異性スコア順)]:")
                 for c in result["cooccurrence_ring"]["core_candidates"]:
-                    print(f" - {c['tag']} (頻度: {c['frequency_percent']}%, {c['count']}件)")
+                    global_str = f"{c.get('global_post_count', 'unknown')}件"
+                    print(f" - {c['tag']:<22} | 母集団内: {c.get('local_count', 0)}件 ({c['frequency_percent']}%) | Danbooru総数: {global_str:>8} | 希少度スコア: {c.get('rarity_score', 0)}")
     except Exception as e:
         print(f"エラー: {e}", file=sys.stderr)
         sys.exit(1)
