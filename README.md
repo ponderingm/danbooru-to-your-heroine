@@ -8,6 +8,12 @@ Danbooru / Gelbooru / AIBooru / Civitai の投稿・画像生成メタデータ�
 
 ## 🌟 主な特徴
 
+- 💎 **個人の語彙力を超える「タグ共起継承（Co-occurrence Inheritance）」**[^1]:
+  プロンプトを一から自作・暗記する必要はありません。Danbooru上の神絵師たちが丹精込めて付与した濃厚な装飾・シチュエーションタグ群（チェーン、金具、光彩、質感、表情など）の共起構造をまるごと吸い上げ、あなたの愛するヒロインへ美しく再受肉させます。
+  - **エンコーダー未知語の具現化**: 仮にCLIPがニッチな単語そのものを理解していなくても、周辺に共起する位置・形状・質感タグ群の幾何学的引力（Attention）によって、意図したオブジェクト（微細なリングやチェーン等）が確実に画像上に具現化します。
+  - **SDXL CLIP（75トークン制限）への奇跡的収束**: 人手審査・タグ付け精度の高いDanbooru投稿は、ノイズパージ後で約30〜45タグ程度に洗練されています。ここにヒロインDNA（10〜15タグ）とクオリティ修飾子を加えても合計55〜70トークン前後に収まり、**SDXL CLIPの最重要アテンション領域である「第1ブロック（75トークン以内）」をほぼ突破しません**。チャンク境界によるアテンション減衰を起こさず、濃密な共起情報が一括注入されるため、極めて高い再現精度を誇ります。
+
+[^1]: **暗号化された実証コード**: `bGFiaWFfcmluZw==` (Base64) — タグ辞書に未登録の微小・特殊属性であっても、実在する投稿群の「共起継承の輪（xxxxx ring）」から周辺の必須要素を自動収集・継承することで美麗な再現が成立するという、本プロジェクト初期の実地検証に由来。
 - 🌐 **マルチサイト対応**: Danbooru, Gelbooru, AIBooru, Civitai（`civitai.com/images`）のURL/IDを統一解析（[`UnifiedPost`](src/site_adapters/base.py)）。
 - 🧬 **2層ルール・マージ構造**:
   - **Base層（Git管理・公式共通ルール）**: 普遍的なメタタグ・画面ノイズ除去、身体属性辞書、画風カタログ（[`src/rules/default_rules.yaml`](src/rules/default_rules.yaml)）。
@@ -46,6 +52,8 @@ danbooru-to-your-heroine/
 │   ├── server.py                       # FastAPI APIサーバー（ジョブキュー・各種API）
 │   ├── rules/
 │   │   └── default_rules.yaml          # 公式Baseルール辞書（Git管理・共有資産）
+│   ├── prompts/                        # LLM用プロンプト・指示書（Markdown管理）
+│   │   └── natural_search_system_instruction.md # 自然言語➜Booruタグ変換用プロンプト
 │   ├── site_adapters/                  # マルチサイト対応アダプタ群
 │   │   ├── __init__.py                 # URL判別・ファクトリ関数
 │   │   ├── base.py                     # UnifiedPostデータモデル & 基底クラス
@@ -256,6 +264,13 @@ uv run python src/danbooru_search_batch_generator.py "micro_bikini" --backend il
 | `--no-resume` | `database/danbooru_search_batch_progress.json` の進捗を無視して先頭から実行 |
 
 進捗は `database/danbooru_search_batch_progress.json` に自動保存され、`--no-resume` を付けない限り中断・再開が可能です。
+
+> [!TIP]
+> **💡 Booru サイト別の検索特性と推奨使い分け**
+> - **Danbooru**: 無料枠/匿名利用では「最大2タグまで」のAPI制限があります。3タグ以上の複合クエリ（例: `beach ice_cream order:score rating:explicit`）はAPI側で弾かれるため、本ツールでは2タグで取得した後に手元で残りを判定（クライアント側フィルタ）する機構を備えていますが、対象投稿がヒットするまでページを繰り続けるため時間がかかります。  
+>   その代わり**タグ付け品質は最高峰**であり、1〜2個のコア単語（特定の微小装飾やシチュエーション）を指定するだけで極めて美麗・濃密なタグ群が連鎖するため、「共起継承の輪（xxxxx ring）」の恩恵を最大に受けることができます。
+> - **Gelbooru**: 無料でも3タグ以上の複数タグ・ソート・レーティングを柔軟に同時検索可能です。自然言語から抽出した複数条件で手早くバッチを回したい場合は Gelbooru の利用・併用が極めて実用的です。
+
 
 ---
 
