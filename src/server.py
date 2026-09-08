@@ -119,6 +119,7 @@ class ConvertRequest(BaseModel):
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
     override_art_style: Optional[str] = None
+    search_query: Optional[str] = None
 
 
 
@@ -147,7 +148,7 @@ def _resolve_generation_backend(req: GenerateRequest, dna: dict, model: str) -> 
     """generate用の実効バックエンド設定を解決する。req.backend指定時はそれを優先し、
     未指定時は旧model/use_custom/checkpointパラメータから疑似backendを組み立てる（後方互換）"""
     if req.backend:
-        backend = resolve_backend(req.backend)
+        backend = resolve_backend(req.backend, fallback_online=True)
     else:
         if "anima" in model.lower():
             workflow, comfy_url = "anima", ANIMA_COMFY_URL
@@ -186,10 +187,12 @@ def _convert(req: ConvertRequest):
     if getattr(req, "override_art_style", None) and req.override_art_style != "default":
         adhoc_rules["art_style"] = req.override_art_style
 
-    identity_tags, situation_tags, _removed = mutate_tags_to_heroine(
+    res = mutate_tags_to_heroine(
         post, heroine=heroine, include_artist=req.include_artist, artist_mode=req.artist_mode,
         custom_artist=req.custom_artist, override_rules=adhoc_rules,
     )
+    identity_tags, situation_tags, _removed = res[0], res[1], res[2]
+    extra_neg = getattr(res, "extra_negative_tags", [])
     base_prompt = build_prompt(identity_tags, situation_tags)
     booru_prompt = adapt_prompt(base_prompt, model_type=model)
 
@@ -224,6 +227,7 @@ def _convert(req: ConvertRequest):
         "has_raw_prompt": bool(raw_prompt),
         "detected_model": detected_model,
         "removed_tags": _removed,
+        "extra_negative_tags": extra_neg,
     }
     return post, heroine, selected_prompt, model, extras
 
@@ -382,14 +386,15 @@ def _prune_jobs_locked() -> None:
 
 def _do_generate(req: GenerateRequest) -> dict:
     """実際の変換+ComfyUI生成処理本体（旧/generateの同期実装をジョブから呼び出す形に切り出したもの）"""
-    post, heroine, prompt, model, _ = _convert(req)
+    post, heroine, prompt, model, extras = _convert(req)
     if req.prompt_override and req.prompt_override.strip():
         prompt = req.prompt_override.strip()
 
     prompt_lower = prompt.lower()
     allow_comic = any(t in prompt_lower for t in ["comic", "monochrome", "greyscale", "grayscale", "manga"])
     base_neg = get_negative_prompt(model_type=model, allow_comic=allow_comic)
-    negative = build_heroine_negative_prompt(heroine, base_neg)
+    extra_neg = extras.get("extra_negative_tags", []) if isinstance(extras, dict) else []
+    negative = build_heroine_negative_prompt(heroine, base_neg, extra_tags=extra_neg)
 
     dna = config.HEROINES.get(heroine, {})
     backend = _resolve_generation_backend(req, dna, model)
@@ -432,6 +437,11 @@ def _do_generate(req: GenerateRequest) -> dict:
         "checkpoint": checkpoint,
         "width": gen_width,
         "height": gen_height,
+        "search_query": req.search_query,
+        "override_breasts": req.override_breasts,
+        "override_skin": req.override_skin,
+        "override_costume": req.override_costume,
+        "override_art_style": req.override_art_style,
         "files": saved_files,
         "image_urls": [f"/output/{fn}" for fn in saved_files],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -874,6 +884,7 @@ def _batch_worker_loop(cfg: BatchConfig, run_id: str) -> None:
                     override_art_style=cfg.override_art_style,
                     use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                     width=cfg.width, height=cfg.height, timeout=cfg.timeout,
+                    search_query=cfg.search,
                     is_batch=True,
                 )
                 job_id = _enqueue_generate_job(req, BATCH_PRIORITY)
@@ -1180,9 +1191,6 @@ def update_site_auth_config(req: SiteAuthConfigRequest):
 
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
-
-
-
 
 if os.path.isdir(WEB_DIR):
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

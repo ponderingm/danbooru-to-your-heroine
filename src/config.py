@@ -47,6 +47,7 @@ def reload_config() -> None:
     global QUALITY_TAGS, CHARACTER_IDENTITY_BLACKLIST, BASE_RULES, USER_CONFIG
     global ART_STYLE_TAGS, ART_STYLE_PRESETS
     global META_TAG_BLACKLIST, CENSORING_BLACKLIST, BREAST_TAGS, SKIN_TAGS
+    global MONSTER_SKIN_TAGS, HUMAN_SKIN_TAGS, DARK_SKIN_TAGS
 
     # 1. ユーザー設定ロード（config.yaml が無ければ config.example.yaml をフォールバック）
     user_path = CONFIG_YAML_PATH if CONFIG_YAML_PATH.exists() else CONFIG_EXAMPLE_YAML_PATH
@@ -122,6 +123,9 @@ def reload_config() -> None:
     CENSORING_BLACKLIST = {t.replace("_", " ").lower() for t in BASE_RULES.get("artifact_purge", [])}
     BREAST_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("breasts", [])}
     SKIN_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("skin", [])}
+    MONSTER_SKIN_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("monster_skin_tags", [])}
+    HUMAN_SKIN_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("human_skin_tags", [])}
+    DARK_SKIN_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("dark_skin_tags", [])}
 
     # 6. 画風・媒体カタログ（default_rules.yaml + config.yaml）
     base_styles = set()

@@ -131,13 +131,28 @@ def get_heroine_dna(heroine: str) -> dict:
     }
 
 
-def build_heroine_negative_prompt(heroine: str, base_negative: str) -> str:
-    """ヒロイン固有のnegative_tagsと旧default_negative_extraをnegative promptへ追記する。"""
+class MutatedTagsResult(tuple):
+    """(identity_tags, situation_tags, removed_tags) の3要素タプルとして後方互換性を保ちつつ、
+    extra_negative_tags などの追加メタデータを安全に保持するコンテナ"""
+    def __new__(cls, identity_tags, situation_tags, removed_tags, extra_negative_tags=None):
+        return super().__new__(cls, (identity_tags, situation_tags, removed_tags))
+
+    def __init__(self, identity_tags, situation_tags, removed_tags, extra_negative_tags=None):
+        self.identity_tags = identity_tags
+        self.situation_tags = situation_tags
+        self.removed_tags = removed_tags
+        self.extra_negative_tags = extra_negative_tags or []
+
+
+def build_heroine_negative_prompt(heroine: str, base_negative: str, extra_tags: list = None) -> str:
+    """ヒロイン固有のnegative_tagsと旧default_negative_extra、およびスマート肌色ポリシー等からの追加タグをnegative promptへ追記する。"""
     dna = get_heroine_dna(heroine)
     extras = list(dna.get("negative_tags", []))
     legacy_extra = dna.get("default_negative_extra")
     if legacy_extra:
         extras.extend(tag.strip() for tag in legacy_extra.split(","))
+    if extra_tags:
+        extras.extend(extra_tags)
 
     if not extras:
         return base_negative
@@ -268,8 +283,14 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
 
     detected_source_breasts = set()
     detected_source_skin = set()
+    detected_source_monster_skin = set()
+    detected_source_human_skin = set()
     detected_source_style = set()
-    skin_tags_set = SKIN_TAGS
+
+    skin_tags_set = getattr(config, "SKIN_TAGS", set())
+    monster_skin_set = getattr(config, "MONSTER_SKIN_TAGS", set())
+    human_skin_set = getattr(config, "HUMAN_SKIN_TAGS", set())
+    dark_skin_set = getattr(config, "DARK_SKIN_TAGS", set())
     art_style_set = build_art_style_set()
 
     # 一般タグ → ブラックリスト除去 → 構図・服装として保持
@@ -296,12 +317,24 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                 removed_tags.append(tag_norm)
                 continue
 
-        # 肌色判定（オーバーライドルール: strict = ヒロイン固定, source = 元絵維持）
-        if tag_norm in skin_tags_set:
+        # 肌色判定（スマート肌色ポリシー: strict = ヒロイン固定, source = 元絵維持）
+        if tag_norm in skin_tags_set or tag_norm in monster_skin_set:
             if skin_mode == "source":
-                situation_tags.append(tag.replace("_", " "))
-                detected_source_skin.add(tag_norm)
-                continue
+                # モンスター肌（blue skin, slime girl等）なら元絵を優先維持
+                if tag_norm in monster_skin_set:
+                    situation_tags.append(tag.replace("_", " "))
+                    detected_source_monster_skin.add(tag_norm)
+                    detected_source_skin.add(tag_norm)
+                    continue
+                # 人間系肌（pale skin, fair skin等）なら、元絵はパージしてヒロインの褐色肌を適用
+                elif tag_norm in human_skin_set:
+                    removed_tags.append(tag_norm)
+                    detected_source_human_skin.add(tag_norm)
+                    continue
+                else:
+                    situation_tags.append(tag.replace("_", " "))
+                    detected_source_skin.add(tag_norm)
+                    continue
             else:
                 removed_tags.append(tag_norm)
                 continue
@@ -337,8 +370,23 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     if detected_source_breasts:
         body_tags = [b for b in body_tags if b.replace("_", " ").lower() not in BREAST_TAGS]
 
-    # 元絵の肌色タグが維持(source)された場合、ヒロイン側の肌色タグを除外
-    if detected_source_skin:
+    extra_negative_tags = []
+    # スマート肌色ポリシー適用:
+    if skin_mode == "source":
+        if detected_source_monster_skin:
+            # モンスター肌（青肌スライム等）検出時:
+            # 1. ヒロイン側の褐色系タグをプロンプトから完全除去（モンスター肌で上書き）
+            body_tags = [
+                b for b in body_tags
+                if b.replace("_", " ").lower() not in skin_tags_set and b.replace("_", " ").lower() not in dark_skin_set
+            ]
+            # 2. キャラタグのバイアスで顔が褐色になるのを防ぐため、褐色タグをネガティブへ自動注入！
+            extra_negative_tags.extend(["dark skin", "dark-skinned female", "tan", "tanlines", "brown skin"])
+        else:
+            # 人間系肌（pale skin等）または肌タグなし時:
+            # 元絵が人間ならヒロイン本来の褐色肌（body_tags）をそのまま適用！
+            pass
+    elif detected_source_skin:
         body_tags = [b for b in body_tags if b.replace("_", " ").lower() not in skin_tags_set]
 
     # 衣装モード判定
@@ -356,7 +404,7 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
             situation_tags.append(art_style_mode.replace("_", " "))
 
     identity_tags = dna.get("identity_tags", []) + face_tags + body_tags + active_costumes
-    return identity_tags, situation_tags, removed_tags
+    return MutatedTagsResult(identity_tags, situation_tags, removed_tags, extra_negative_tags=extra_negative_tags)
 
 
 

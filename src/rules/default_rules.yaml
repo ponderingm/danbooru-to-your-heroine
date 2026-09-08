@@ -117,6 +117,14 @@ identity_attributes:
     - tanlines
     - sun tan
     - one-piece tan
+    - blue skin
+    - green skin
+    - purple skin
+    - red skin
+    - pink skin
+    - grey skin
+    - gray skin
+    - colored skin
   breasts:
     - flat chest
     - small breasts
@@ -316,3 +324,35 @@ art_style_presets:
     - chibi
   pixel_art:
     - pixel art
+
+# 肌色カテゴリ分類（スマート肌色ポリシー用）
+monster_skin_tags:
+  - blue skin
+  - green skin
+  - purple skin
+  - red skin
+  - pink skin
+  - grey skin
+  - gray skin
+  - colored skin
+  - alien skin
+  - monster skin
+  - slime girl
+  - see-through body
+
+human_skin_tags:
+  - pale skin
+  - fair skin
+  - light skin
+  - white skin
+
+dark_skin_tags:
+  - dark skin
+  - dark-skinned female
+  - dark-skinned male
+  - tan skin
+  - brown skin
+  - tan
+  - tanlines
+  - sun tan
+  - one-piece tan

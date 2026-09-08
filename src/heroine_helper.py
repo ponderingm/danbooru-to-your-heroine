@@ -162,6 +162,10 @@ def search_and_analyze_heroine(
         series_esc = top_series.replace("(", "\\(").replace(")", "\\)")
         suggested_identity.append(series_esc)
 
+    breasts_candidates = [b for b in body_candidates if b.get("category") == "breasts"]
+    skin_candidates = [b for b in body_candidates if b.get("category") == "skin"]
+    other_body_candidates = [b for b in body_candidates if b.get("category") not in ("breasts", "skin")]
+
     return {
         "character_name": char_display,
         "search_site": site,
@@ -169,11 +173,17 @@ def search_and_analyze_heroine(
         "suggested_identity_tags": suggested_identity,
         "suggested_face_tags": [f["tag"] for f in face_candidates[:6]],
         "suggested_body_tags": [b["tag"] for b in body_candidates[:6]],
+        "suggested_breasts_tags": [b["tag"] for b in breasts_candidates[:4]],
+        "suggested_skin_tags": [s["tag"] for s in skin_candidates[:4]],
+        "suggested_body_other_tags": [o["tag"] for o in other_body_candidates[:4]],
         "suggested_costume_tags": [c["tag"] for c in costume_candidates[:6]],
         "suggested_series_tags": [s["tag"] for s in series_candidates[:2]],
         "suggested_override_rules": suggested_override_rules,
         "face_candidates": face_candidates[:12],
         "body_candidates": body_candidates[:12],
+        "breasts_candidates": breasts_candidates[:8],
+        "skin_candidates": skin_candidates[:8],
+        "other_body_candidates": other_body_candidates[:8],
         "series_candidates": series_candidates,
         "artist_candidates": artist_candidates,
         "costume_candidates": costume_candidates[:12],

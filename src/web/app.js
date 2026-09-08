@@ -68,7 +68,8 @@ const batchStatusEl = document.getElementById("batch-status");
 
 function resolveArtistInput(val) {
   const v = (val || "").trim();
-  if (!v || v === "none") return { artist_mode: "none", custom_artist: undefined };
+  if (!v || v === "default") return { artist_mode: "default", custom_artist: undefined };
+  if (v === "none") return { artist_mode: "none", custom_artist: undefined };
   if (v === "keep") return { artist_mode: "keep", custom_artist: undefined };
   if (v === "override") return { artist_mode: "override", custom_artist: undefined };
   return { artist_mode: "custom", custom_artist: v };
@@ -237,14 +238,15 @@ function getSearchComboboxItems(filter) {
 }
 
 const ARTIST_PRESETS = [
-  { value: "none", label: "🏷️ none", badge: "完全除去" },
-  { value: "keep", label: "🎨 keep", badge: "元絵維持" },
-  { value: "override", label: "🦸 override", badge: "代表絵師" },
+  { value: "default", label: "⚙️ 設定通り", badge: "default" },
+  { value: "override", label: "🔒 固定", badge: "override" },
+  { value: "keep", label: "🎨 元絵", badge: "keep" },
+  { value: "none", label: "🚫 なし", badge: "none" },
 ];
 
 function saveArtistHistory(artist) {
   const a = (artist || "").trim();
-  if (!a || ["none", "keep", "override"].includes(a)) return;
+  if (!a || ["default", "none", "keep", "override"].includes(a)) return;
   let history = JSON.parse(localStorage.getItem("d2h_artist_history") || "[]");
   history = [a, ...history.filter(item => item !== a)].slice(0, 20);
   localStorage.setItem("d2h_artist_history", JSON.stringify(history));
@@ -986,19 +988,169 @@ let galleryOffset = 0;
 let galleryTotal = 0;
 const selectedTags = new Set();
 
-function openLightbox(src) {
+const lightboxBar = document.getElementById("lightbox-bar");
+
+function loadToGenerateForm(entry, targetMode = "single") {
+  if (!entry) return;
+
+  switchTab("generate");
+
+  if (targetMode === "single") {
+    if (urlInput && entry.original_url) {
+      urlInput.value = entry.original_url;
+    }
+    if (heroineSelect && entry.heroine) {
+      heroineSelect.value = entry.heroine;
+    }
+    if (backendSelect && (entry.backend || entry.model)) {
+      backendSelect.value = entry.backend || entry.model;
+    }
+    if (fOverrideBreasts) {
+      fOverrideBreasts.value = entry.override_breasts || "default";
+    }
+    if (fOverrideSkin) {
+      fOverrideSkin.value = entry.override_skin || "default";
+    }
+    if (fOverrideCostume) {
+      fOverrideCostume.value = entry.override_costume || "default";
+    }
+    if (fOverrideArtStyle) {
+      fOverrideArtStyle.value = entry.override_art_style || "default";
+    }
+    if (fArtistInput) {
+      if (entry.custom_artist) {
+        fArtistInput.value = entry.custom_artist;
+      } else if (entry.artist_mode && entry.artist_mode !== "default") {
+        fArtistInput.value = entry.artist_mode;
+      } else {
+        fArtistInput.value = "";
+      }
+    }
+    updateOptionDefaults(false);
+
+    const formEl = document.getElementById("generate-form");
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    setStatus(formStatus, `🖼️ ギャラリーから投稿 (ID: ${entry.post_id || ""}) と設定を読み込んだわ。確認して生成してね♪`, "ok");
+  } else if (targetMode === "batch") {
+    if (batchSearchInput && entry.search_query) {
+      batchSearchInput.value = entry.search_query;
+    }
+    if (batchHeroineSelect && entry.heroine) {
+      batchHeroineSelect.value = entry.heroine;
+    }
+    if (batchBackendSelect && (entry.backend || entry.model)) {
+      batchBackendSelect.value = entry.backend || entry.model;
+    }
+    if (bOverrideBreasts) {
+      bOverrideBreasts.value = entry.override_breasts || "default";
+    }
+    if (bOverrideSkin) {
+      bOverrideSkin.value = entry.override_skin || "default";
+    }
+    if (bOverrideCostume) {
+      bOverrideCostume.value = entry.override_costume || "default";
+    }
+    if (bOverrideArtStyle) {
+      bOverrideArtStyle.value = entry.override_art_style || "default";
+    }
+    if (bArtistInput) {
+      if (entry.custom_artist) {
+        bArtistInput.value = entry.custom_artist;
+      } else if (entry.artist_mode && entry.artist_mode !== "default") {
+        bArtistInput.value = entry.artist_mode;
+      } else {
+        bArtistInput.value = "";
+      }
+    }
+    updateOptionDefaults(true);
+
+    const batchEl = document.getElementById("batch-panel");
+    if (batchEl) {
+      batchEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    const statusMsg = entry.search_query
+      ? `🔄 ギャラリーから検索タグ「${entry.search_query}」と設定を読み込んだわ。確認してバッチ開始してね♪`
+      : `🔄 ギャラリーから設定を読み込んだわ。検索クエリを入力して開始してね♪`;
+    setStatus(batchStatusEl, statusMsg, "ok");
+  }
+}
+
+function openLightbox(src, entry = null) {
   lightboxImg.src = src;
+  if (lightboxBar) {
+    if (!entry) {
+      lightboxBar.classList.add("hidden");
+      lightboxBar.innerHTML = "";
+    } else {
+      lightboxBar.classList.remove("hidden");
+      let html = `<div class="lb-info">`;
+      html += `<div class="lb-title-row">`;
+      html += `<span class="lb-heroine">${escapeHtml(heroineLabel(entry.heroine))}</span>`;
+      if (entry.post_id) {
+        html += `<span class="lb-post">post #${escapeHtml(String(entry.post_id))}</span>`;
+      }
+      html += `</div>`;
+      if (entry.search_query) {
+        html += `<div class="card-search-query lb-sq" title="クリックしてこのタグでバッチ検索に遷移"><span class="search-query-label">🔍 検索タグ:</span> <span class="search-query-val" title="${escapeHtml(entry.search_query)}">${escapeHtml(entry.search_query)}</span></div>`;
+      }
+      html += `</div>`;
+      html += `<div class="lb-actions">`;
+      if (entry.original_url) {
+        html += `<a class="secondary btn-sm" href="${escapeHtml(entry.original_url)}" target="_blank" rel="noopener">元投稿</a>`;
+      }
+      html += `<button type="button" class="lb-to-single secondary btn-sm" title="単一生成に設定を読み込んで遷移">🎨 単一生成へ</button>`;
+      if (entry.search_query) {
+        html += `<button type="button" class="lb-to-batch secondary btn-sm" title="バッチ生成に検索タグと設定を読み込んで遷移">🔄 バッチへ</button>`;
+      }
+      html += `</div>`;
+      lightboxBar.innerHTML = html;
+
+      const sqBadge = lightboxBar.querySelector(".lb-sq");
+      if (sqBadge) {
+        sqBadge.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeLightbox();
+          loadToGenerateForm(entry, "batch");
+        });
+      }
+      const toSingleBtn = lightboxBar.querySelector(".lb-to-single");
+      if (toSingleBtn) {
+        toSingleBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeLightbox();
+          loadToGenerateForm(entry, "single");
+        });
+      }
+      const toBatchBtn = lightboxBar.querySelector(".lb-to-batch");
+      if (toBatchBtn) {
+        toBatchBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeLightbox();
+          loadToGenerateForm(entry, "batch");
+        });
+      }
+    }
+  }
   lightbox.classList.remove("hidden");
 }
 
 function closeLightbox() {
   lightbox.classList.add("hidden");
   lightboxImg.src = "";
+  if (lightboxBar) {
+    lightboxBar.classList.add("hidden");
+    lightboxBar.innerHTML = "";
+  }
 }
 
 lightbox.addEventListener("click", closeLightbox);
 lightboxClose.addEventListener("click", (e) => { e.stopPropagation(); closeLightbox(); });
 lightboxImg.addEventListener("click", (e) => e.stopPropagation());
+if (lightboxBar) {
+  lightboxBar.addEventListener("click", (e) => e.stopPropagation());
+}
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeLightbox();
 });
@@ -1006,6 +1158,82 @@ document.addEventListener("keydown", (e) => {
 function setStatus(el, message, kind) {
   el.textContent = message;
   el.className = "status" + (kind ? " " + kind : "");
+}
+
+const ART_STYLE_LABELS = {
+  source: "🎨 元絵維持",
+  anime: "✨ 標準アニメ調",
+  monochrome: "🖤 モノクロ漫画",
+  watercolor: "💧 水彩画風",
+  thick_coating: "🖌️ 厚塗り調",
+  retro_90s: "📺 90年代風",
+  chibi: "🧸 ちびキャラ",
+  pixel_art: "👾 ドット絵",
+};
+
+const COSTUME_LABELS = {
+  source: "👗 元絵衣装",
+  heroine: "🦸 ヒロイン衣装",
+  mix: "✨ ハイブリッド",
+};
+
+function updateOptionDefaults(heroineKey, isBatch = false) {
+  if (!heroineKey) return;
+  const h = heroinesDetailsCache[heroineKey] || {};
+  const rules = h.override_rules || {};
+
+  const breastSelect = isBatch ? bOverrideBreasts : fOverrideBreasts;
+  const skinSelect = isBatch ? bOverrideSkin : fOverrideSkin;
+  const costumeSelect = isBatch ? bOverrideCostume : fOverrideCostume;
+  const artStyleSelect = isBatch ? bOverrideArtStyle : fOverrideArtStyle;
+  const artistInput = isBatch ? bArtistInput : fArtistInput;
+
+  if (breastSelect) {
+    breastSelect.title = `ヒロイン基本設定: ${rules.breasts === "source" ? "元絵" : "固定"}`;
+  }
+  if (skinSelect) {
+    skinSelect.title = `ヒロイン基本設定: ${rules.skin === "source" ? "元絵" : "固定"}`;
+  }
+  if (costumeSelect) {
+    const cMode = rules.costume === "heroine" ? "ヒロイン" : (rules.costume === "mix" ? "ミックス" : "元絵");
+    costumeSelect.title = `ヒロイン基本設定: ${cMode}`;
+  }
+  if (artStyleSelect) {
+    artStyleSelect.title = `ヒロイン基本設定: ${rules.art_style || "元絵"}`;
+  }
+  if (artistInput) {
+    const artistTag = (h.artist_tags && h.artist_tags[0]) || "";
+    let aMode = "なし";
+    if (rules.artist === "override") {
+      aMode = artistTag ? `固定 (${artistTag.replace(/^artist:/, "")})` : "固定";
+    } else if (rules.artist === "keep") {
+      aMode = "元絵";
+    }
+    artistInput.title = `ヒロイン基本設定: ${aMode}`;
+    artistInput.placeholder = "⚙️ 設定通り";
+  }
+
+  const bSelect = isBatch ? batchBackendSelect : backendSelect;
+  if (bSelect && h.default_backend) {
+    let targetBackend = h.default_backend;
+    const targetOpt = bSelect.querySelector(`option[value="${targetBackend}"]`);
+
+    // 指定バックエンドがオフラインの場合、同系モデルのオンラインバックエンドへ自動フォールバック
+    if (targetOpt && targetOpt.classList.contains("backend-offline")) {
+      const isAnima = targetBackend.toLowerCase().includes("anima");
+      const onlineOptions = Array.from(bSelect.options).filter(o => !o.classList.contains("backend-offline"));
+      let fallbackOpt = null;
+      if (isAnima) {
+        fallbackOpt = onlineOptions.find(o => o.value.toLowerCase().includes("anima"));
+      } else {
+        fallbackOpt = onlineOptions.find(o => !o.value.toLowerCase().includes("anima"));
+      }
+      if (fallbackOpt) {
+        targetBackend = fallbackOpt.value;
+      }
+    }
+    bSelect.value = targetBackend;
+  }
 }
 
 async function loadHeroines() {
@@ -1020,6 +1248,20 @@ async function loadHeroines() {
   batchHeroineSelect.innerHTML = Object.entries(heroines)
     .map(([key, dna]) => `<option value="${key}">${dna.name}</option>`)
     .join("");
+
+  if (heroineSelect.value) updateOptionDefaults(heroineSelect.value, false);
+  if (batchHeroineSelect.value) updateOptionDefaults(batchHeroineSelect.value, true);
+}
+
+if (heroineSelect) {
+  heroineSelect.addEventListener("change", () => {
+    updateOptionDefaults(heroineSelect.value, false);
+  });
+}
+if (batchHeroineSelect) {
+  batchHeroineSelect.addEventListener("change", () => {
+    updateOptionDefaults(batchHeroineSelect.value, true);
+  });
 }
 
 function heroineLabel(key) {
@@ -1287,6 +1529,133 @@ async function deleteEntry(entryId, card) {
   card.remove();
 }
 
+function showToast(message, duration = 3000) {
+  let toast = document.getElementById("toast-notification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast-notification";
+    toast.className = "toast-notification";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("show");
+  if (toast._timer) clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove("show");
+  }, duration);
+}
+
+async function addTagToPurgeList(rawTag) {
+  const tag = (rawTag || "").trim().toLowerCase();
+  if (!tag) return;
+
+  const ok = window.confirm(`🗑️ タグ「${tag}」を除外パージ（purge）タグに追加しますか？\n\n今後の生成時、元絵に含まれていても自動的に除去されます。`);
+  if (!ok) return;
+
+  try {
+    let purgeList = currentUserPurgeTags || [];
+    let unpurgeSet = new Set(currentUserUnpurgeTags || []);
+
+    if (purgeList.length === 0) {
+      const resTags = await fetch(`${API_BASE}/purge_tags`);
+      if (resTags.ok) {
+        const d = await resTags.json();
+        purgeList = d.user_purge_tags || [];
+        unpurgeSet = new Set(d.user_unpurge_tags || []);
+      }
+    }
+
+    if (!purgeList.includes(tag)) {
+      purgeList = [...purgeList, tag];
+    }
+    unpurgeSet.delete(tag);
+
+    const res = await fetch(`${API_BASE}/purge_tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        purge_tags: purgeList,
+        unpurge_tags: Array.from(unpurgeSet),
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    currentUserPurgeTags = purgeList;
+    currentUserUnpurgeTags = unpurgeSet;
+    await loadPurgeTags();
+    showToast(`🗑️ タグ「${tag}」を除外パージタグに追加したわ！`);
+  } catch (err) {
+    alert(`除外パージタグの追加に失敗しました: ${err.message}`);
+  }
+}
+
+function attachTagPillEvents(pill, tag) {
+  let pressTimer = null;
+  let isLongPress = false;
+  let startX = 0;
+  let startY = 0;
+  const LONG_PRESS_MS = 550;
+
+  function startPress(e) {
+    isLongPress = false;
+    if (e.touches && e.touches.length > 0) {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }
+    pill.classList.add("pressing");
+    pressTimer = setTimeout(() => {
+      isLongPress = true;
+      pill.classList.remove("pressing");
+      if (navigator.vibrate) {
+        try { navigator.vibrate(50); } catch (_) {}
+      }
+      addTagToPurgeList(tag);
+    }, LONG_PRESS_MS);
+  }
+
+  function cancelPress() {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+    pill.classList.remove("pressing");
+  }
+
+  function checkMove(e) {
+    if (e.touches && e.touches.length > 0) {
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
+      if (dx > 8 || dy > 8) {
+        cancelPress();
+      }
+    }
+  }
+
+  pill.addEventListener("touchstart", startPress, { passive: true });
+  pill.addEventListener("touchend", cancelPress);
+  pill.addEventListener("touchmove", checkMove, { passive: true });
+  pill.addEventListener("touchcancel", cancelPress);
+
+  pill.addEventListener("mousedown", (e) => {
+    if (e.button === 0) startPress(e);
+  });
+  pill.addEventListener("mouseup", cancelPress);
+  pill.addEventListener("mouseleave", cancelPress);
+
+  pill.addEventListener("click", (e) => {
+    if (isLongPress) {
+      e.preventDefault();
+      e.stopPropagation();
+      isLongPress = false;
+      return;
+    }
+    addFilterTag(tag);
+  });
+}
+
 function renderCard(entry) {
   const img = (entry.image_urls && entry.image_urls[0]) || "";
   const created = entry.created_at ? new Date(entry.created_at).toLocaleString("ja-JP") : "";
@@ -1299,6 +1668,12 @@ function renderCard(entry) {
     <div class="card-body">
       <div class="heroine-name">${escapeHtml(heroineLabel(entry.heroine))}</div>
       <div>post #${entry.post_id} ・ ${escapeHtml(entry.backend || entry.model || "")}</div>
+      ${entry.search_query ? `
+        <div class="card-search-query" title="クリックしてこの検索タグでバッチ生成へ遷移">
+          <span class="search-query-label">🔍 検索タグ:</span>
+          <span class="search-query-val">${escapeHtml(entry.search_query)}</span>
+        </div>
+      ` : ""}
       <button type="button" class="secondary tag-toggle-btn">🏷 使用タグを表示 (${tags.length})</button>
       <div class="prompt hidden"></div>
       <div>${created}</div>
@@ -1306,12 +1681,35 @@ function renderCard(entry) {
       <textarea class="regen-prompt hidden" rows="3">${escapeHtml(entry.prompt || "")}</textarea>
       <div class="card-actions">
         <a class="secondary" href="${entry.original_url}" target="_blank" rel="noopener">元投稿</a>
+        <button type="button" class="load-single-btn secondary" title="単一生成にこの投稿と設定を読み込んで遷移">🎨 単一生成へ</button>
+        ${entry.search_query ? `<button type="button" class="load-batch-btn secondary" title="バッチ生成に検索タグと設定を読み込んで遷移">🔄 バッチへ</button>` : ""}
         <button type="button" class="regen-btn">🔁 再生成</button>
         <button type="button" class="delete-btn danger">🗑 削除</button>
       </div>
       <p class="status regen-status"></p>
     </div>
   `;
+
+  const sqQueryEl = card.querySelector(".card-search-query");
+  if (sqQueryEl) {
+    sqQueryEl.addEventListener("click", () => {
+      loadToGenerateForm(entry, "batch");
+    });
+  }
+
+  const loadSingleBtn = card.querySelector(".load-single-btn");
+  if (loadSingleBtn) {
+    loadSingleBtn.addEventListener("click", () => {
+      loadToGenerateForm(entry, "single");
+    });
+  }
+
+  const loadBatchBtn = card.querySelector(".load-batch-btn");
+  if (loadBatchBtn) {
+    loadBatchBtn.addEventListener("click", () => {
+      loadToGenerateForm(entry, "batch");
+    });
+  }
 
   const tagToggleBtn = card.querySelector(".tag-toggle-btn");
   const promptEl = card.querySelector(".prompt");
@@ -1320,10 +1718,10 @@ function renderCard(entry) {
     const nowHidden = promptEl.classList.toggle("hidden");
     if (!nowHidden && !tagsRendered) {
       promptEl.innerHTML = tags
-        .map((t) => `<span class="tag-pill" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`)
+        .map((t) => `<span class="tag-pill" data-tag="${escapeHtml(t)}" title="タップ: 絞り込み / 長押し: 除外(purge)タグに追加">${escapeHtml(t)}</span>`)
         .join(", ");
       promptEl.querySelectorAll(".tag-pill").forEach((pill) => {
-        pill.addEventListener("click", () => addFilterTag(pill.dataset.tag));
+        attachTagPillEvents(pill, pill.dataset.tag);
       });
       tagsRendered = true;
     }
@@ -1331,7 +1729,7 @@ function renderCard(entry) {
   });
 
   const imgEl = card.querySelector("img");
-  if (imgEl) imgEl.addEventListener("click", () => openLightbox(img));
+  if (imgEl) imgEl.addEventListener("click", () => openLightbox(img, entry));
 
   const promptEditToggleBtn = card.querySelector(".prompt-edit-toggle-btn");
   const regenPromptEl = card.querySelector(".regen-prompt");
@@ -1920,9 +2318,12 @@ const helperApplyAllBtn = document.getElementById("helper-apply-all-btn");
 const helperStatusEl = document.getElementById("helper-status");
 const helperResultsEl = document.getElementById("helper-results");
 const helperFaceChips = document.getElementById("helper-face-chips");
+const helperBreastsChips = document.getElementById("helper-breasts-chips");
+const helperSkinChips = document.getElementById("helper-skin-chips");
 const helperBodyChips = document.getElementById("helper-body-chips");
-const helperSeriesChips = document.getElementById("helper-series-chips");
 const helperCostumeChips = document.getElementById("helper-costume-chips");
+const helperSeriesChips = document.getElementById("helper-series-chips");
+const helperArtistChips = document.getElementById("helper-artist-chips");
 const helperNegativeChips = document.getElementById("helper-negative-chips");
 
 const heroineForm = document.getElementById("heroine-form");
@@ -1931,7 +2332,10 @@ const hmName = document.getElementById("hm-name");
 const hmCheckpoint = document.getElementById("hm-checkpoint");
 const hmIdentity = document.getElementById("hm-identity");
 const hmFace = document.getElementById("hm-face");
-const hmBody = document.getElementById("hm-body");
+const hmTagBreasts = document.getElementById("hm-tag-breasts");
+const hmTagSkin = document.getElementById("hm-tag-skin");
+const hmBodyOther = document.getElementById("hm-body-other");
+const hmBody = document.getElementById("hm-body"); // フォールバック用
 const hmCostume = document.getElementById("hm-costume");
 const hmRuleBreasts = document.getElementById("hm-rule-breasts");
 const hmRuleSkin = document.getElementById("hm-rule-skin");
@@ -1948,6 +2352,19 @@ const hmStatusEl = document.getElementById("hm-status");
 let heroinesDetailsCache = {};
 let lastAnalysisResult = null;
 let currentHeroineKey = null;
+
+const BREAST_KEYWORDS = ["breasts", "cleavage", "flat chest", "breast", "bust"];
+const SKIN_KEYWORDS = ["skin", "tan", "tanlines", "pale", "fair"];
+
+function isBreastTag(tag) {
+  const t = (tag || "").toLowerCase().trim();
+  return BREAST_KEYWORDS.some(k => t.includes(k));
+}
+
+function isSkinTag(tag) {
+  const t = (tag || "").toLowerCase().trim();
+  return SKIN_KEYWORDS.some(k => t.includes(k));
+}
 
 // 設定サブタブの切り替え
 document.querySelectorAll(".settings-subnav-btn").forEach(btn => {
@@ -1984,6 +2401,9 @@ async function loadHeroinesDetails() {
     } else {
       resetHeroineFormNew();
     }
+
+    if (heroineSelect && heroineSelect.value) updateOptionDefaults(heroineSelect.value, false);
+    if (batchHeroineSelect && batchHeroineSelect.value) updateOptionDefaults(batchHeroineSelect.value, true);
   } catch (err) {
     console.error("Failed to load heroines details:", err);
   }
@@ -2041,7 +2461,32 @@ function populateHeroineForm(key) {
   hmCheckpoint.value = h.default_checkpoint || "";
   hmIdentity.value = (h.identity_tags || []).join(", ");
   hmFace.value = (h.face_tags || []).join(", ");
-  hmBody.value = (h.body_tags || []).join(", ");
+
+  // body_tags を胸サイズ、肌色、その他体格に自動分類して各欄にセット
+  const allBodyTags = h.body_tags || [];
+  let breastsTags = h.breasts_tags;
+  let skinTags = h.skin_tags;
+  let otherBodyTags = h.body_other_tags;
+
+  if (!breastsTags || !skinTags || !otherBodyTags) {
+    breastsTags = [];
+    skinTags = [];
+    otherBodyTags = [];
+    allBodyTags.forEach(tag => {
+      if (isBreastTag(tag)) {
+        breastsTags.push(tag);
+      } else if (isSkinTag(tag)) {
+        skinTags.push(tag);
+      } else {
+        otherBodyTags.push(tag);
+      }
+    });
+  }
+
+  if (hmTagBreasts) hmTagBreasts.value = breastsTags.join(", ");
+  if (hmTagSkin) hmTagSkin.value = skinTags.join(", ");
+  if (hmBodyOther) hmBodyOther.value = otherBodyTags.join(", ");
+  if (hmBody) hmBody.value = allBodyTags.join(", ");
   hmCostume.value = (h.costume_tags || []).join(", ");
 
   const rules = h.override_rules || {};
@@ -2070,7 +2515,10 @@ function resetHeroineFormNew() {
   hmCheckpoint.value = "";
   hmIdentity.value = "";
   hmFace.value = "";
-  hmBody.value = "";
+  if (hmTagBreasts) hmTagBreasts.value = "";
+  if (hmTagSkin) hmTagSkin.value = "";
+  if (hmBodyOther) hmBodyOther.value = "";
+  if (hmBody) hmBody.value = "";
   hmCostume.value = "";
   if (hmRuleBreasts) hmRuleBreasts.value = "strict";
   if (hmRuleSkin) hmRuleSkin.value = "strict";
@@ -2147,62 +2595,121 @@ function renderAnalysisResults(data) {
     });
   }
 
-  // 身体タグ
-  helperBodyChips.innerHTML = (data.body_candidates || []).map(b => `
-    <span class="helper-chip" data-tag="${escapeHtml(b.tag)}" title="${escapeHtml(b.category)}">
-      + ${escapeHtml(b.tag)} <span class="rate">${b.rate}%</span>
-    </span>
-  `).join("") || `<span style="color: #666;">検出なし</span>`;
+  // 🍒 胸サイズ候補
+  const breastsCandidates = data.breasts_candidates || (data.body_candidates || []).filter(b => isBreastTag(b.tag));
+  if (helperBreastsChips) {
+    helperBreastsChips.innerHTML = breastsCandidates.map(b => `
+      <span class="helper-chip" data-tag="${escapeHtml(b.tag)}" title="${escapeHtml(b.category || "breasts")}">
+        + ${escapeHtml(b.tag)} <span class="rate">${b.rate}%</span>
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
 
-  helperBodyChips.querySelectorAll(".helper-chip").forEach(el => {
-    el.addEventListener("click", () => {
-      appendTagToTextarea(hmBody, el.dataset.tag);
-      el.style.opacity = "0.5";
+    helperBreastsChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        appendTagToTextarea(hmTagBreasts, el.dataset.tag);
+        el.style.opacity = "0.5";
+      });
     });
-  });
+  }
 
-  // 作品タグ
-  helperSeriesChips.innerHTML = (data.series_candidates || []).map(s => `
-    <span class="helper-chip" data-tag="${escapeHtml(s.tag)}">
-      + ${escapeHtml(s.tag)} <span class="rate">${s.rate}%</span>
-    </span>
-  `).join("") || `<span style="color: #666;">検出なし</span>`;
+  // ☀️ 肌色候補
+  const skinCandidates = data.skin_candidates || (data.body_candidates || []).filter(b => isSkinTag(b.tag));
+  if (helperSkinChips) {
+    helperSkinChips.innerHTML = skinCandidates.map(s => `
+      <span class="helper-chip" data-tag="${escapeHtml(s.tag)}" title="${escapeHtml(s.category || "skin")}">
+        + ${escapeHtml(s.tag)} <span class="rate">${s.rate}%</span>
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
 
-  helperSeriesChips.querySelectorAll(".helper-chip").forEach(el => {
-    el.addEventListener("click", () => {
-      const esc = el.dataset.tag.replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-      appendTagToTextarea(hmSeries, esc);
-      el.style.opacity = "0.5";
+    helperSkinChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        appendTagToTextarea(hmTagSkin, el.dataset.tag);
+        el.style.opacity = "0.5";
+      });
     });
-  });
+  }
+
+  // 🧍 その他体型候補
+  const otherBodyCandidates = data.other_body_candidates || (data.body_candidates || []).filter(b => !isBreastTag(b.tag) && !isSkinTag(b.tag));
+  if (helperBodyChips) {
+    helperBodyChips.innerHTML = otherBodyCandidates.map(b => `
+      <span class="helper-chip" data-tag="${escapeHtml(b.tag)}" title="${escapeHtml(b.category)}">
+        + ${escapeHtml(b.tag)} <span class="rate">${b.rate}%</span>
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+    helperBodyChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        appendTagToTextarea(hmBodyOther, el.dataset.tag);
+        el.style.opacity = "0.5";
+      });
+    });
+  }
 
   // 衣装タグ
-  helperCostumeChips.innerHTML = (data.costume_candidates || []).map(c => `
-    <span class="helper-chip" data-tag="${escapeHtml(c.tag)}">
-      + ${escapeHtml(c.tag)} <span class="rate">${c.rate}%</span>
-    </span>
-  `).join("") || `<span style="color: #666;">検出なし</span>`;
+  if (helperCostumeChips) {
+    helperCostumeChips.innerHTML = (data.costume_candidates || []).map(c => `
+      <span class="helper-chip" data-tag="${escapeHtml(c.tag)}">
+        + ${escapeHtml(c.tag)} <span class="rate">${c.rate}%</span>
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
 
-  helperCostumeChips.querySelectorAll(".helper-chip").forEach(el => {
-    el.addEventListener("click", () => {
-      appendTagToTextarea(hmCostume, el.dataset.tag);
-      el.style.opacity = "0.5";
+    helperCostumeChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        appendTagToTextarea(hmCostume, el.dataset.tag);
+        el.style.opacity = "0.5";
+      });
     });
-  });
+  }
+
+  // 作品タグ
+  if (helperSeriesChips) {
+    helperSeriesChips.innerHTML = (data.series_candidates || []).map(s => `
+      <span class="helper-chip" data-tag="${escapeHtml(s.tag)}">
+        + ${escapeHtml(s.tag)} <span class="rate">${s.rate}%</span>
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+    helperSeriesChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        const esc = el.dataset.tag.replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+        appendTagToTextarea(hmSeries, esc);
+        el.style.opacity = "0.5";
+      });
+    });
+  }
+
+  // 🧑‍🎨 代表絵師候補
+  if (helperArtistChips) {
+    helperArtistChips.innerHTML = (data.artist_candidates || []).map(a => `
+      <span class="helper-chip" data-tag="${escapeHtml(a.tag)}">
+        + ${escapeHtml(a.tag)} <span class="rate">${a.rate}%</span>
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
+
+    helperArtistChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        appendTagToTextarea(hmArtist, el.dataset.tag);
+        el.style.opacity = "0.5";
+      });
+    });
+  }
 
   // ネガティブタグ
-  helperNegativeChips.innerHTML = (data.negative_candidates || []).map(n => `
-    <span class="helper-chip" data-tag="${escapeHtml(n.tag)}" title="${escapeHtml(n.reason)}">
-      + ${escapeHtml(n.tag)}
-    </span>
-  `).join("") || `<span style="color: #666;">検出なし</span>`;
+  if (helperNegativeChips) {
+    helperNegativeChips.innerHTML = (data.negative_candidates || []).map(n => `
+      <span class="helper-chip" data-tag="${escapeHtml(n.tag)}" title="${escapeHtml(n.reason)}">
+        + ${escapeHtml(n.tag)}
+      </span>
+    `).join("") || `<span style="color: #666;">検出なし</span>`;
 
-  helperNegativeChips.querySelectorAll(".helper-chip").forEach(el => {
-    el.addEventListener("click", () => {
-      appendTagToTextarea(hmNegative, el.dataset.tag);
-      el.style.opacity = "0.5";
+    helperNegativeChips.querySelectorAll(".helper-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        appendTagToTextarea(hmNegative, el.dataset.tag);
+        el.style.opacity = "0.5";
+      });
     });
-  });
+  }
 }
 
 // ✨ 分析結果を一括反映
@@ -2215,7 +2722,16 @@ if (helperApplyAllBtn) {
 
     hmIdentity.value = (d.suggested_identity_tags || []).join(", ");
     hmFace.value = (d.suggested_face_tags || []).join(", ");
-    hmBody.value = (d.suggested_body_tags || []).join(", ");
+
+    const allSuggestedBody = d.suggested_body_tags || [];
+    const breasts = d.suggested_breasts_tags || allSuggestedBody.filter(isBreastTag);
+    const skin = d.suggested_skin_tags || allSuggestedBody.filter(isSkinTag);
+    const other = d.suggested_body_other_tags || allSuggestedBody.filter(t => !isBreastTag(t) && !isSkinTag(t));
+
+    if (hmTagBreasts) hmTagBreasts.value = breasts.join(", ");
+    if (hmTagSkin) hmTagSkin.value = skin.join(", ");
+    if (hmBodyOther) hmBodyOther.value = other.join(", ");
+
     hmCostume.value = (d.suggested_costume_tags || []).join(", ");
 
     const r = d.suggested_override_rules || {};
@@ -2223,7 +2739,7 @@ if (helperApplyAllBtn) {
     if (hmRuleSkin) hmRuleSkin.value = r.skin || "strict";
     if (hmRuleCostume) hmRuleCostume.value = r.costume || "source";
     if (hmRuleArtStyle) hmRuleArtStyle.value = r.art_style || "source";
-    if (hmRuleArtist) hmRuleArtist.value = r.artist || "none";
+    if (hmRuleArtist) hmRuleArtist.value = r.artist || "override";
 
     hmSeries.value = (d.suggested_series_tags || []).map(t => t.replace(/\(/g, "\\(").replace(/\)/g, "\\)")).join(", ");
 
@@ -2233,7 +2749,7 @@ if (helperApplyAllBtn) {
     if (d.negative_candidates && d.negative_candidates.length > 0) {
       hmNegative.value = d.negative_candidates.map(n => n.tag).join(", ");
     }
-    setStatus(hmStatusEl, "✨ 3大カテゴリと絶対遵守ルールを一括流し込みしたわ！確認して保存してね♪", "success");
+    setStatus(hmStatusEl, "✨ 基本DNAと換装オプションを一括流し込みしたわ！確認して保存してね♪", "success");
   });
 }
 
@@ -2248,13 +2764,21 @@ if (heroineForm) {
     }
     hmSaveBtn.disabled = true;
     try {
-      const splitTags = (val) => val.split(/[\n,]+/).map(t => t.trim()).filter(Boolean);
+      const splitTags = (val) => val ? val.split(/[\n,]+/).map(t => t.trim()).filter(Boolean) : [];
+
+      const breastsTags = hmTagBreasts ? splitTags(hmTagBreasts.value) : [];
+      const skinTags = hmTagSkin ? splitTags(hmTagSkin.value) : [];
+      const otherBodyTags = hmBodyOther ? splitTags(hmBodyOther.value) : [];
+      const combinedBodyTags = Array.from(new Set([...breastsTags, ...skinTags, ...otherBodyTags]));
 
       const heroineData = {
         name: hmName.value.trim() || key,
         identity_tags: splitTags(hmIdentity.value),
         face_tags: splitTags(hmFace.value),
-        body_tags: splitTags(hmBody.value),
+        body_tags: combinedBodyTags,
+        breasts_tags: breastsTags,
+        skin_tags: skinTags,
+        body_other_tags: otherBodyTags,
         costume_tags: splitTags(hmCostume.value),
         override_rules: {
           breasts: hmRuleBreasts ? hmRuleBreasts.value : "strict",
@@ -2361,9 +2885,12 @@ document.addEventListener("click", (e) => {
     "user-purge-input",
     "hm-identity",
     "hm-face",
-    "hm-body",
+    "hm-tag-breasts",
+    "hm-tag-skin",
+    "hm-body-other",
     "hm-costume",
     "hm-series",
+    "hm-artist",
     "hm-negative"
   ];
   autocompleteTargetIds.forEach(id => {

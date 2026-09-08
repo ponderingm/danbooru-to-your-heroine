@@ -83,13 +83,40 @@ def create_default_workflow(prompt_text: str, negative_text: str, filename_prefi
     }
 
 
-def resolve_backend(backend_id: str = None) -> dict:
+def resolve_backend(backend_id: str = None, fallback_online: bool = False) -> dict:
     """config.GENERATION_BACKENDSからbackend_idを引き、生成に必要な設定一式を返す。
-    未指定/未登録ならconfig.DEFAULT_BACKENDにフォールバックする"""
+    未指定/未登録ならconfig.DEFAULT_BACKENDにフォールバックする。
+    fallback_online=Trueの場合、指定バックエンドがオフラインなら同一モデル（anima等）の
+    オンラインな代替バックエンドへ自動フォールバックする。"""
     backends = getattr(config, "GENERATION_BACKENDS", {})
     if backend_id not in backends:
         backend_id = getattr(config, "DEFAULT_BACKEND", None)
-    backend = backends.get(backend_id, {})
+
+    selected_id = backend_id
+    if fallback_online and selected_id in backends:
+        b = backends[selected_id]
+        url = b.get("comfy_url", COMFYUI_URL)
+        if not check_comfy_online(url, timeout=0.8):
+            target_model = b.get("model", "illustrious")
+            # 同一モデル（例: anima）のオンラインバックエンドを優先探索
+            for alt_id, alt_b in backends.items():
+                if alt_id != selected_id and alt_b.get("model") == target_model:
+                    alt_url = alt_b.get("comfy_url", COMFYUI_URL)
+                    if check_comfy_online(alt_url, timeout=0.8):
+                        print(f"Backend '{selected_id}' is offline. Falling back to '{alt_id}' ({alt_b.get('label')})")
+                        selected_id = alt_id
+                        break
+            else:
+                # 同一モデルで見つからなければ、任意のオンラインバックエンドを探す
+                for alt_id, alt_b in backends.items():
+                    if alt_id != selected_id:
+                        alt_url = alt_b.get("comfy_url", COMFYUI_URL)
+                        if check_comfy_online(alt_url, timeout=0.8):
+                            print(f"Backend '{selected_id}' is offline. Falling back to '{alt_id}' ({alt_b.get('label')})")
+                            selected_id = alt_id
+                            break
+
+    backend = backends.get(selected_id, {})
     wf = backend.get("workflow", "default")
     is_anima = (wf == "anima")
     default_steps = ANIMA_STEPS if is_anima else CUSTOM_STEPS
@@ -98,8 +125,8 @@ def resolve_backend(backend_id: str = None) -> dict:
     default_scheduler = ANIMA_SCHEDULER if is_anima else CUSTOM_SCHEDULER
 
     return {
-        "id": backend_id,
-        "label": backend.get("label", backend_id or ""),
+        "id": selected_id,
+        "label": backend.get("label", selected_id or ""),
         "model": backend.get("model", "anima" if is_anima else "illustrious"),
         "workflow": wf,
         "comfy_url": backend.get("comfy_url", ANIMA_COMFY_URL if is_anima else COMFYUI_URL),

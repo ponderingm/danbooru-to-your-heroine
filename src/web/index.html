@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>danbooru-to-your-heroine v2.0</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header>
@@ -51,49 +51,49 @@
             <span class="help-tip" data-tooltip="今回の生成時のみ適用される換装ルールです。未指定時はヒロインの基本設定に従います">?</span>
           </div>
           <div class="form-row" style="gap: 12px; flex-wrap: wrap;">
-            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
-              🍒 胸サイズ
+            <label style="flex: 1; min-width: 100px; margin: 0; font-size: 0.78rem;">
+              🍒 胸サイズ <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【固定】ヒロインの胸タグを強制適用&#10;【元絵】元絵の胸サイズタグを維持">?</span>
               <select id="f-override-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="strict">🔒 ヒロイン固定 (Strict)</option>
-                <option value="source">🎨 元絵維持 (Source)</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="strict">🔒 固定</option>
+                <option value="source">🎨 元絵</option>
               </select>
             </label>
-            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
-              ☀️ 肌色
+            <label style="flex: 1; min-width: 100px; margin: 0; font-size: 0.78rem;">
+              ☀️ 肌色 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【固定】常にヒロイン肌色を適用&#10;【元絵】異形・モンスター肌なら元絵優先＋褐色除外、人間肌なら褐色維持">?</span>
               <select id="f-override-skin" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="strict">🔒 ヒロイン固定 (Strict)</option>
-                <option value="source">🎨 元絵維持 (Source)</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="strict">🔒 固定</option>
+                <option value="source">🎨 元絵</option>
               </select>
             </label>
-            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
-              👗 衣装
+            <label style="flex: 1; min-width: 100px; margin: 0; font-size: 0.78rem;">
+              👗 衣装 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【元絵】元絵の衣装を着る&#10;【ヒロイン】代表衣装を着る&#10;【ミックス】元絵衣装＋ヒロイン小物">?</span>
               <select id="f-override-costume" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="source">👗 元絵衣装</option>
-                <option value="heroine">🦸 ヒロイン衣装</option>
-                <option value="mix">✨ ハイブリッド</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="source">👗 元絵</option>
+                <option value="heroine">🦸 ヒロイン</option>
+                <option value="mix">✨ ミックス</option>
               </select>
             </label>
-            <label style="flex: 1.1; min-width: 135px; margin: 0; font-size: 0.78rem;">
-              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: 水彩・漫画・厚塗りなど元絵画風を尊重&#10;標準アニメ調: 画風タグを全除去してセル画アニメ調&#10;その他: 元絵の画風を消去し指定画風へ強制転換">?</span>
+            <label style="flex: 1.1; min-width: 110px; margin: 0; font-size: 0.78rem;">
+              🖌️ 画風 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【元絵】元絵の画風を尊重&#10;【アニメ/その他】元絵画風を除去し指定画風に転換">?</span>
               <select id="f-override-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="source">🎨 元絵維持 (Source)</option>
-                <option value="anime">✨ 標準アニメ調 (Anime)</option>
-                <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
-                <option value="watercolor">💧 水彩画風 (Watercolor)</option>
-                <option value="thick_coating">🖌️ 厚塗り調 (Painterly)</option>
-                <option value="retro_90s">📺 90年代風 (90s retro)</option>
-                <option value="chibi">🧸 ちびキャラ (Chibi)</option>
-                <option value="pixel_art">👾 ドット絵 (Pixel art)</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="source">🎨 元絵</option>
+                <option value="anime">✨ アニメ</option>
+                <option value="monochrome">🖤 モノクロ</option>
+                <option value="watercolor">💧 水彩</option>
+                <option value="thick_coating">🖌️ 厚塗り</option>
+                <option value="retro_90s">📺 90年代</option>
+                <option value="chibi">🧸 ミニキャラ</option>
+                <option value="pixel_art">👾 ドット絵</option>
               </select>
             </label>
-            <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
-              🧑‍🎨 絵師 <span class="help-tip" data-tooltip="none: 絵師タグ除去&#10;keep: 元絵の絵師維持&#10;override: ヒロインの代表絵師&#10;または作家名を直接入力">?</span>
+            <label style="flex: 1.3; min-width: 130px; margin: 0; font-size: 0.78rem;">
+              🧑‍🎨 絵師 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【固定】代表絵師を適用&#10;【元絵】元絵の絵師を維持&#10;【なし】絵師タグを除去&#10;※作家名の直接入力も可能">?</span>
               <div class="combobox-wrapper">
-                <input type="text" id="f-artist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;" autocomplete="off">
+                <input type="text" id="f-artist" placeholder="⚙️ 設定通り" style="padding: 4px 8px; font-size: 0.82rem;" autocomplete="off">
                 <div id="f-artist-dropdown" class="combobox-dropdown"></div>
               </div>
             </label>
@@ -181,49 +181,49 @@
             <span class="help-tip" data-tooltip="バッチ生成中の全画像に対して適用される換装ルールです。未指定時はヒロインの基本設定に従います">?</span>
           </div>
           <div class="form-row" style="gap: 12px; flex-wrap: wrap;">
-            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
-              🍒 胸サイズ
+            <label style="flex: 1; min-width: 100px; margin: 0; font-size: 0.78rem;">
+              🍒 胸サイズ <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【固定】ヒロインの胸タグを強制適用&#10;【元絵】元絵の胸サイズタグを維持">?</span>
               <select id="b-override-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="strict">🔒 ヒロイン固定 (Strict)</option>
-                <option value="source">🎨 元絵維持 (Source)</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="strict">🔒 固定</option>
+                <option value="source">🎨 元絵</option>
               </select>
             </label>
-            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
-              ☀️ 肌色
+            <label style="flex: 1; min-width: 100px; margin: 0; font-size: 0.78rem;">
+              ☀️ 肌色 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【固定】常にヒロイン肌色を適用&#10;【元絵】異形・モンスター肌なら元絵優先＋褐色除外、人間肌なら褐色維持">?</span>
               <select id="b-override-skin" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="strict">🔒 ヒロイン固定 (Strict)</option>
-                <option value="source">🎨 元絵維持 (Source)</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="strict">🔒 固定</option>
+                <option value="source">🎨 元絵</option>
               </select>
             </label>
-            <label style="flex: 1; min-width: 120px; margin: 0; font-size: 0.78rem;">
-              👗 衣装
+            <label style="flex: 1; min-width: 100px; margin: 0; font-size: 0.78rem;">
+              👗 衣装 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【元絵】元絵の衣装を着る&#10;【ヒロイン】代表衣装を着る&#10;【ミックス】元絵衣装＋ヒロイン小物">?</span>
               <select id="b-override-costume" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="source">👗 元絵衣装</option>
-                <option value="heroine">🦸 ヒロイン衣装</option>
-                <option value="mix">✨ ハイブリッド</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="source">👗 元絵</option>
+                <option value="heroine">🦸 ヒロイン</option>
+                <option value="mix">✨ ミックス</option>
               </select>
             </label>
-            <label style="flex: 1.1; min-width: 135px; margin: 0; font-size: 0.78rem;">
-              🖌️ 画風 <span class="help-tip" data-tooltip="元絵維持: 水彩・漫画・厚塗りなど元絵画風を尊重&#10;標準アニメ調: 画風タグを全除去してセル画アニメ調&#10;その他: 元絵の画風を消去し指定画風へ強制転換">?</span>
+            <label style="flex: 1.1; min-width: 110px; margin: 0; font-size: 0.78rem;">
+              🖌️ 画風 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【元絵】元絵の画風を尊重&#10;【アニメ/その他】元絵画風を除去し指定画風に転換">?</span>
               <select id="b-override-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
-                <option value="default">設定通り (デフォルト)</option>
-                <option value="source">🎨 元絵維持 (Source)</option>
-                <option value="anime">✨ 標準アニメ調 (Anime)</option>
-                <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
-                <option value="watercolor">💧 水彩画風 (Watercolor)</option>
-                <option value="thick_coating">🖌️ 厚塗り調 (Painterly)</option>
-                <option value="retro_90s">📺 90年代風 (90s retro)</option>
-                <option value="chibi">🧸 ちびキャラ (Chibi)</option>
-                <option value="pixel_art">👾 ドット絵 (Pixel art)</option>
+                <option value="default">⚙️ 設定通り</option>
+                <option value="source">🎨 元絵</option>
+                <option value="anime">✨ アニメ</option>
+                <option value="monochrome">🖤 モノクロ</option>
+                <option value="watercolor">💧 水彩</option>
+                <option value="thick_coating">🖌️ 厚塗り</option>
+                <option value="retro_90s">📺 90年代</option>
+                <option value="chibi">🧸 ミニキャラ</option>
+                <option value="pixel_art">👾 ドット絵</option>
               </select>
             </label>
-            <label style="flex: 1.4; min-width: 150px; margin: 0; font-size: 0.78rem;">
-              🧑‍🎨 絵師 <span class="help-tip" data-tooltip="none, keep, override, または作家名">?</span>
+            <label style="flex: 1.3; min-width: 130px; margin: 0; font-size: 0.78rem;">
+              🧑‍🎨 絵師 <span class="help-tip" data-tooltip="【設定通り】ヒロインエディタの設定を使用&#10;【固定】代表絵師を適用&#10;【元絵】元絵の絵師を維持&#10;【なし】絵師タグを除去&#10;※作家名の直接入力も可能">?</span>
               <div class="combobox-wrapper">
-                <input type="text" id="b-artist" placeholder="none, keep, override, 作家名" style="padding: 4px 8px; font-size: 0.82rem;" autocomplete="off">
+                <input type="text" id="b-artist" placeholder="⚙️ 設定通り" style="padding: 4px 8px; font-size: 0.82rem;" autocomplete="off">
                 <div id="b-artist-dropdown" class="combobox-dropdown"></div>
               </div>
             </label>
@@ -377,20 +377,35 @@
                     <span class="helper-section-title">👤 顔・頭部タグ候補 (髪型・髪色・瞳、クリックで顔タグ欄に追加):</span>
                     <div id="helper-face-chips" class="tag-chips"></div>
                   </div>
-                  <!-- 身体DNA候補 -->
+                  <!-- 🍒 胸サイズ候補 -->
                   <div class="helper-section">
-                    <span class="helper-section-title">👙 体型・身体タグ候補 (肌色・胸・体格、クリックで体型タグ欄に追加):</span>
+                    <span class="helper-section-title">🍒 胸サイズ候補 (クリックで胸タグ欄に追加):</span>
+                    <div id="helper-breasts-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- ☀️ 肌色候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">☀️ 肌色タグ候補 (クリックで肌色タグ欄に追加):</span>
+                    <div id="helper-skin-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- 🧍 その他体格候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">🧍 その他体格候補 (体型・身長等、クリックでその他体型欄に追加):</span>
                     <div id="helper-body-chips" class="tag-chips"></div>
                   </div>
                   <!-- 代表衣装候補 -->
                   <div class="helper-section">
-                    <span class="helper-section-title">👗 代表衣装・アクセサリ候補 (クリックで衣装タグ欄に追加):</span>
+                    <span class="helper-section-title">👗 代表衣装・アクセサリ候補 (クリックで代表衣装欄に追加):</span>
                     <div id="helper-costume-chips" class="tag-chips"></div>
                   </div>
                   <!-- 作品名候補 -->
                   <div class="helper-section">
                     <span class="helper-section-title">📚 作品名タグ候補 (クリックで作品タグ欄に追加):</span>
                     <div id="helper-series-chips" class="tag-chips"></div>
+                  </div>
+                  <!-- 代表絵師候補 -->
+                  <div class="helper-section">
+                    <span class="helper-section-title">🧑‍🎨 代表絵師候補 (クリックで代表絵師欄に追加):</span>
+                    <div id="helper-artist-chips" class="tag-chips"></div>
                   </div>
                   <!-- ネガティブ候補 -->
                   <div class="helper-section">
@@ -417,116 +432,183 @@
                 </div>
               </div>
 
-              <div class="form-row" style="margin-top: 12px;">
-                <label style="flex: 1;">
-                  ヒロインID <span class="help-tip" data-tooltip="英数小文字キー。内部管理やファイル名に使用されます (例: heroine_id)">?</span>
-                  <input type="text" id="hm-key" required placeholder="heroine_id">
-                </label>
-                <label style="flex: 1.5;">
-                  表示名 <span class="help-tip" data-tooltip="画面上に表示されるキャラクターの名称">?</span>
-                  <input type="text" id="hm-name" required placeholder="表示名">
-                </label>
-                <label style="flex: 1.5;">
-                  デフォルトCheckpoint <span class="help-tip" data-tooltip="このヒロイン選択時に優先するモデル (未設定時は標準モデル)">?</span>
-                  <input type="text" id="hm-checkpoint" placeholder="model_name.safetensors">
-                </label>
-              </div>
-
-              <!-- ⚡ オーバーライドルール設定 (絶対遵守 vs 柔軟適応) -->
-              <div class="settings-card">
+              <!-- ══════════════════════════════════════════
+                   セクション1: 👸 基本アイデンティティ（固有DNA）
+                   ══════════════════════════════════════════ -->
+              <div class="settings-card" style="margin-top: 12px;">
                 <div class="settings-card-title">
-                  ⚡ オーバーライドルール
-                  <span class="help-tip" data-tooltip="キャラごとの「絶対に崩してはならない属性」と「元絵に合わせて柔軟に受け入れる属性」を個別に指定します">?</span>
+                  👸 基本アイデンティティ（固有DNA）
+                  <span class="help-tip" data-tooltip="元絵や生成オプションに関わらず、キャラクターの本質として常に適用される固有の特徴です">?</span>
                 </div>
+
                 <div class="form-row">
                   <label style="flex: 1;">
-                    🍒 胸サイズ
-                    <span class="help-tip" data-tooltip="Strict: 元絵の胸タグを完全消去し、ヒロインの胸サイズに強制固定&#10;Source: 元絵の胸サイズタグをそのまま活かす">?</span>
-                    <select id="hm-rule-breasts">
-                      <option value="strict">🔒 ヒロイン固定 (Strict)</option>
-                      <option value="source">🎨 元絵維持 (Source)</option>
-                    </select>
+                    ヒロインID <span class="help-tip" data-tooltip="英数小文字キー。内部管理やファイル名に使用されます (例: heroine_id)">?</span>
+                    <input type="text" id="hm-key" required placeholder="heroine_id">
+                  </label>
+                  <label style="flex: 1.5;">
+                    表示名 <span class="help-tip" data-tooltip="画面上に表示されるキャラクターの名称">?</span>
+                    <input type="text" id="hm-name" required placeholder="表示名">
+                  </label>
+                  <label style="flex: 1.5;">
+                    デフォルトCheckpoint <span class="help-tip" data-tooltip="このヒロイン選択時に優先するモデル (未設定時は標準モデル)">?</span>
+                    <input type="text" id="hm-checkpoint" placeholder="model_name.safetensors">
+                  </label>
+                </div>
+
+                <label>
+                  🌟 アイデンティティタグ <span class="help-tip" data-tooltip="プロンプト先頭に必ず入る核となるキャラ名タグ (カンマ区切り)">?</span>
+                  <textarea id="hm-identity" rows="2" placeholder="character name, series \(series\)"></textarea>
+                </label>
+
+                <div class="form-row" style="gap: 12px;">
+                  <label style="flex: 1;">
+                    👤 顔・頭部 <span class="help-tip" data-tooltip="髪型・髪色・瞳の色など。元絵の頭部特徴をこのDNAで置換します">?</span>
+                    <textarea id="hm-face" rows="2" placeholder="hair length, hair style, hair color, eye color"></textarea>
                   </label>
                   <label style="flex: 1;">
-                    ☀️ 肌色
-                    <span class="help-tip" data-tooltip="Strict: 褐色肌や色白肌など指定肌色を強制固定&#10;Source: 元絵の肌色を尊重">?</span>
-                    <select id="hm-rule-skin">
-                      <option value="strict">🔒 ヒロイン固定 (Strict)</option>
-                      <option value="source">🎨 元絵維持 (Source)</option>
-                    </select>
+                    🧍 その他体型・体格 <span class="help-tip" data-tooltip="身長やくびれ等、胸サイズ・肌色以外の身体特徴（例: petite, mature female, tall など）">?</span>
+                    <textarea id="hm-body-other" rows="2" placeholder="body type, height, petite, curvy"></textarea>
+                  </label>
+                </div>
+
+                <div class="form-row" style="gap: 12px;">
+                  <label style="flex: 1;">
+                    📚 作品名 <span class="help-tip" data-tooltip="除外パージせず残したいシリーズタグ (例: series \(series\))">?</span>
+                    <input type="text" id="hm-series" placeholder="series \(series\)">
                   </label>
                   <label style="flex: 1;">
-                    👗 衣装ポリシー
-                    <span class="help-tip" data-tooltip="Source: 元絵の衣装を着る&#10;Heroine: 元絵の服を脱いで代表衣装を着る&#10;Mix: 元絵衣装＋代表衣装アクセサリ">?</span>
-                    <select id="hm-rule-costume">
-                      <option value="source">👗 元絵の衣装を着る</option>
-                      <option value="heroine">🦸 ヒロイン衣装を着る</option>
-                      <option value="mix">✨ ハイブリッド</option>
-                    </select>
-                  </label>
-                  <label style="flex: 1;">
-                    🖌️ 画風ポリシー
-                    <span class="help-tip" data-tooltip="Source: 元絵のcomic/monochrome/水彩等の画風を尊重&#10;Anime: 画風タグを全除去してセル画アニメ調&#10;その他: 常に指定した画風へ強制転換">?</span>
-                    <select id="hm-rule-art-style">
-                      <option value="source">🎨 元絵維持 (Source)</option>
-                      <option value="anime">✨ 標準アニメ調 (Anime)</option>
-                      <option value="monochrome">🖤 モノクロ漫画 (Comic)</option>
-                      <option value="watercolor">💧 水彩画風 (Watercolor)</option>
-                      <option value="thick_coating">🖌️ 厚塗り調 (Painterly)</option>
-                      <option value="retro_90s">📺 90年代風 (90s retro)</option>
-                      <option value="chibi">🧸 ちびキャラ (Chibi)</option>
-                      <option value="pixel_art">👾 ドット絵 (Pixel art)</option>
-                    </select>
-                  </label>
-                  <label style="flex: 1;">
-                    🧑‍🎨 絵師ポリシー
-                    <span class="help-tip" data-tooltip="None: 絵師タグを完全除去&#10;Override: 常にヒロインの代表絵師を使用&#10;Keep: 元絵の絵師タグを優先維持">?</span>
-                    <select id="hm-rule-artist">
-                      <option value="none">🚫 絵師除去 (None)</option>
-                      <option value="override">🔒 ヒロイン固定 (Override)</option>
-                      <option value="keep">🎨 元絵維持 (Keep)</option>
-                    </select>
+                    🚫 固有ネガティブ <span class="help-tip" data-tooltip="このヒロイン生成時にネガティブプロンプトへ追加する除外タグ">?</span>
+                    <input type="text" id="hm-negative" placeholder="tags to exclude for this heroine">
                   </label>
                 </div>
               </div>
 
-              <label>
-                アイデンティティ <span class="help-tip" data-tooltip="置換後に必ず先頭へ入る核となるキャラ名・作品タグ (カンマ区切り)">?</span>
-                <textarea id="hm-identity" rows="2" placeholder="character name, series \(series\)"></textarea>
-              </label>
+              <!-- ══════════════════════════════════════════
+                   セクション2: 🎛️ 換装オプション・デフォルト設定
+                   ══════════════════════════════════════════ -->
+              <div class="settings-card" style="margin-top: 12px;">
+                <div class="settings-card-title">
+                  🎛️ 換装オプション・デフォルト設定
+                  <span class="help-tip" data-tooltip="生成画面の【🎛️ オプション】と1対1で完全連動します。ここで設定した各項目のルールとタグが『設定通り (デフォルト)』時の動作となります">?</span>
+                </div>
+                <p style="font-size: 0.78rem; color: var(--text-dim); margin: 0 0 8px;">
+                  生成画面のオプション項目（胸・肌色・衣装・画風・絵師）のデフォルトルールと、ヒロイン固定時に適用される指定タグを定義します。
+                </p>
 
-              <!-- 3大カテゴリ分類: 顔・体型・衣装 -->
-              <div class="form-row" style="gap: 12px;">
-                <label style="flex: 1;">
-                  👤 顔・頭部 <span class="help-tip" data-tooltip="髪型・髪色・瞳の色など。元絵の髪や瞳をヒロインの顔DNAで置換します">?</span>
-                  <textarea id="hm-face" rows="3" placeholder="hair length, hair style, hair color, eye color"></textarea>
-                </label>
-                <label style="flex: 1;">
-                  👙 体型・身体 <span class="help-tip" data-tooltip="肌色・胸サイズ・くびれなど。ヒロインのプロポーションを定義します">?</span>
-                  <textarea id="hm-body" rows="3" placeholder="skin tone, breast size, body type"></textarea>
-                </label>
+                <!-- 1. 🍒 胸サイズ -->
+                <div class="option-card" style="background: #181a26; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px;">
+                  <div style="font-size: 0.85rem; font-weight: bold; color: #ff79c6; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>🍒 胸サイズ</span>
+                    <span class="help-tip" data-tooltip="Strict (固定): 元絵の胸タグを除去し、ヒロイン胸タグを強制適用&#10;Source (元絵維持): 元絵の胸サイズタグを活かす">?</span>
+                  </div>
+                  <div class="form-row" style="align-items: flex-end; gap: 12px;">
+                    <label style="flex: 1.2; margin: 0;">
+                      デフォルトルール
+                      <select id="hm-rule-breasts" style="padding: 4px 8px; font-size: 0.82rem;">
+                        <option value="strict">🔒 固定</option>
+                        <option value="source">🎨 元絵</option>
+                      </select>
+                    </label>
+                    <label style="flex: 2; margin: 0;">
+                      ヒロイン胸タグ (固定時に適用)
+                      <input type="text" id="hm-tag-breasts" placeholder="small breasts, flat chest など" style="padding: 4px 8px; font-size: 0.82rem;">
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 2. ☀️ 肌色 -->
+                <div class="option-card" style="background: #181a26; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px;">
+                  <div style="font-size: 0.85rem; font-weight: bold; color: #ffb86c; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>☀️ 肌色</span>
+                    <span class="help-tip" data-tooltip="【固定】常にヒロイン肌色を適用&#10;【元絵】異形・モンスター肌なら元絵優先＋褐色除外、人間肌なら褐色維持">?</span>
+                  </div>
+                  <div class="form-row" style="align-items: flex-end; gap: 12px;">
+                    <label style="flex: 1.2; margin: 0;">
+                      デフォルトルール
+                      <select id="hm-rule-skin" style="padding: 4px 8px; font-size: 0.82rem;">
+                        <option value="strict">🔒 固定</option>
+                        <option value="source">🎨 元絵</option>
+                      </select>
+                    </label>
+                    <label style="flex: 2; margin: 0;">
+                      ヒロイン肌色タグ (固定時に適用)
+                      <input type="text" id="hm-tag-skin" placeholder="dark skin, dark-skinned female, one-piece tan など" style="padding: 4px 8px; font-size: 0.82rem;">
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 3. 👗 衣装 -->
+                <div class="option-card" style="background: #181a26; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px;">
+                  <div style="font-size: 0.85rem; font-weight: bold; color: #8be9fd; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>👗 衣装</span>
+                    <span class="help-tip" data-tooltip="【元絵】元絵の服を着る&#10;【ヒロイン】代表衣装を着る&#10;【ミックス】元絵衣装＋ヒロイン小物">?</span>
+                  </div>
+                  <div class="form-row" style="align-items: flex-start; gap: 12px;">
+                    <label style="flex: 1.2; margin: 0;">
+                      デフォルトルール
+                      <select id="hm-rule-costume" style="padding: 4px 8px; font-size: 0.82rem;">
+                        <option value="source">👗 元絵</option>
+                        <option value="heroine">🦸 ヒロイン</option>
+                        <option value="mix">✨ ミックス</option>
+                      </select>
+                    </label>
+                    <label style="flex: 2; margin: 0;">
+                      代表衣装タグ (ヒロイン/ミックス時に適用)
+                      <textarea id="hm-costume" rows="2" placeholder="outfit, clothing, accessories (例: plugsuit, gloves)" style="padding: 4px 8px; font-size: 0.82rem;"></textarea>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 4. 🖌️ 画風 -->
+                <div class="option-card" style="background: #181a26; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px;">
+                  <div style="font-size: 0.85rem; font-weight: bold; color: #bd93f9; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>🖌️ 画風</span>
+                    <span class="help-tip" data-tooltip="【元絵】元絵の画風を尊重&#10;【アニメ/その他】元絵画風を除去し指定画風に統一">?</span>
+                  </div>
+                  <div class="form-row" style="align-items: flex-end; gap: 12px;">
+                    <label style="flex: 1.2; margin: 0;">
+                      デフォルトルール
+                      <select id="hm-rule-art-style" style="padding: 4px 8px; font-size: 0.82rem;">
+                        <option value="source">🎨 元絵</option>
+                        <option value="anime">✨ アニメ</option>
+                        <option value="monochrome">🖤 モノクロ</option>
+                        <option value="watercolor">💧 水彩</option>
+                        <option value="thick_coating">🖌️ 厚塗り</option>
+                        <option value="retro_90s">📺 90年代</option>
+                        <option value="chibi">🧸 ミニキャラ</option>
+                        <option value="pixel_art">👾 ドット絵</option>
+                      </select>
+                    </label>
+                    <div style="flex: 2; font-size: 0.76rem; color: var(--text-dim); line-height: 1.4; padding-bottom: 4px;">
+                      ※ 生成画面の【🖌️ 画風】オプションで「設定通り」を選んだ際にこの画風ポリシーが適用されます。
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 5. 🧑‍🎨 絵師 -->
+                <div class="option-card" style="background: #181a26; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">
+                  <div style="font-size: 0.85rem; font-weight: bold; color: #50fa7b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>🧑‍🎨 絵師</span>
+                    <span class="help-tip" data-tooltip="【固定】代表絵師を常に適用&#10;【元絵】元絵の絵師を優先維持&#10;【なし】絵師タグを除去">?</span>
+                  </div>
+                  <div class="form-row" style="align-items: flex-end; gap: 12px;">
+                    <label style="flex: 1.2; margin: 0;">
+                      デフォルトルール
+                      <select id="hm-rule-artist" style="padding: 4px 8px; font-size: 0.82rem;">
+                        <option value="override">🔒 固定</option>
+                        <option value="keep">🎨 元絵</option>
+                        <option value="none">🚫 なし</option>
+                      </select>
+                    </label>
+                    <label style="flex: 2; margin: 0;">
+                      代表絵師タグ (ヒロイン固定時に適用)
+                      <input type="text" id="hm-artist" placeholder="artist:creator_name (例: artist:aoi nagisa \(metalder\))" style="padding: 4px 8px; font-size: 0.82rem;">
+                    </label>
+                  </div>
+                </div>
+
               </div>
-
-              <label>
-                👗 代表衣装 <span class="help-tip" data-tooltip="公式スーツや代表衣装。衣装ポリシーが有効な際に適用されます">?</span>
-                <textarea id="hm-costume" rows="2" placeholder="outfit, clothing, accessories"></textarea>
-              </label>
-
-              <div class="form-row">
-                <label style="flex: 1;">
-                  作品名 <span class="help-tip" data-tooltip="除外パージせず残したいシリーズタグ (例: series \(series\))">?</span>
-                  <input type="text" id="hm-series" placeholder="series \(series\)">
-                </label>
-                <label style="flex: 1;">
-                  代表絵師 <span class="help-tip" data-tooltip="ヒロイン固定時に使用する絵師タグ (例: artist:creator_name)">?</span>
-                  <input type="text" id="hm-artist" placeholder="artist:creator_name">
-                </label>
-              </div>
-
-              <label>
-                固有ネガティブ <span class="help-tip" data-tooltip="このヒロイン生成時にネガティブプロンプトへ追加する除外タグ">?</span>
-                <textarea id="hm-negative" rows="2" placeholder="tags to exclude for this heroine"></textarea>
-              </label>
 
               <p id="hm-status" class="status"></p>
             </form>
@@ -685,12 +767,13 @@
 <div id="lightbox" class="lightbox hidden">
   <button type="button" id="lightbox-close" class="lightbox-close" aria-label="閉じる">×</button>
   <img id="lightbox-img" src="" alt="拡大表示">
+  <div id="lightbox-bar" class="lightbox-bar hidden"></div>
 </div>
 
 
 
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
 
