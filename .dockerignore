@@ -5,7 +5,7 @@ __pycache__
 uv.lock
 
 # 個人環境設定は実行時にボリュームマウントする（イメージに焼き込まない）
-src/config.py
+src/config.yaml
 
 # 生成物・進捗ファイル
 database/*.json
