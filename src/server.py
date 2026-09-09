@@ -51,7 +51,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List, Dict, Tuple
 
 import urllib.parse
 import requests
@@ -674,62 +674,141 @@ def _batch_post_url(provider: str, post_id: Any) -> str:
     return f"https://danbooru.donmai.us/posts/{post_id}"
 
 
+# --- 高度検索フィルタ定数 ---
+COMMON_MEDIA_BLACKLIST = {
+    "animated", "video", "sound", "audible_speech", "3d", "flash", "ugoira", "source_filmmaker", "webm", "mp4", "gif"
+}
+COMMON_QUALITY_BLACKLIST = {
+    "comic", "manga", "greyscale", "monochrome", "sketch", "lineart", "bad_anatomy", "chibi", "super_deformed"
+}
+COMMON_DISTANT_BLACKLIST = {
+    "wide_shot", "very_wide_shot", "distant_view", "full_body_from_afar"
+}
+GIRL_TAGS = {
+    "1girl", "2girls", "3girls", "4girls", "5girls", "6+girls", "multiple_girls", "girls", "female", "girl"
+}
+
+
 class PostSearchRequest(BaseModel):
     tag: Optional[str] = None
     query: Optional[str] = None
     rating: Optional[str] = "general"
     rejected_ids: Optional[List[int]] = None
     provider: Optional[str] = "danbooru"
-    limit: Optional[int] = 30
+    limit: Optional[int] = 40
     page: Optional[int] = 1
     solo_girl_only: Optional[bool] = True
     skip_realistic: Optional[bool] = True
     skip_blacklisted: Optional[bool] = True
     select_one: Optional[bool] = True
 
+    # ★ 高度ホワイト/ブラックリスト連携パラメータ
+    category: Optional[str] = None
+    excluded_tags: Optional[List[str]] = None
+    excluded_compositions: Optional[List[str]] = None
+    preferred_compositions: Optional[List[str]] = None
+    required_subject: Optional[str] = "1girl"
+    allow_male_partner: Optional[bool] = False
+    allow_nude: Optional[bool] = False
+    prefer_isolated: Optional[bool] = True
 
-def _is_valid_search_candidate(post: dict, rejected_ids: set, r_code: Optional[str],
-                               solo_girl_only: bool, skip_realistic: bool, skip_blacklisted: bool) -> bool:
+
+def _evaluate_candidate_post(post: dict, req: PostSearchRequest, r_code: Optional[str],
+                             rejected_ids: set, relax_composition: bool = False) -> Tuple[bool, int, str]:
+    """
+    イラスト候補を厳格に評価し (合格: bool, Tierスコア: int, 判定理由: str) を返す。
+    Tier 1 (400): 孤立ポスト + 推奨ホワイト構図
+    Tier 2 (300): 孤立ポスト + 標準構図通過
+    Tier 3 (200): 関連ポスト + 推奨ホワイト構図
+    Tier 4 (100): 関連ポスト + 標準構図通過
+    """
     pid = post.get("id")
     if pid and (pid in rejected_ids or int(pid) in rejected_ids):
-        return False
+        return False, 0, "rejected_id"
 
-    # 静止画判定（動画・アニメーション・コミック等の除外）
-    ext = (post.get("file_ext") or "").lower()
+    # レーティング厳格一致
+    if r_code and (post.get("rating") or "").lower() != r_code:
+        return False, 0, "rating_mismatch"
+
+    # 静止画拡張子判定
+    ext = (post.get("file_ext") or "").lower().lstrip(".")
     if ext and ext not in {"jpg", "jpeg", "png", "webp"}:
-        return False
+        return False, 0, "invalid_media_ext"
 
     tags = set((post.get("tag_string") or "").split())
-    excluded = {"animated", "video", "webm", "mp4", "gif", "3d", "comic", "manga"}
-    if tags & excluded:
-        return False
 
-    # レーティング厳格一致判定（指定時のみ）
-    if r_code:
-        post_r = (post.get("rating") or "").lower()
-        if post_r != r_code:
-            return False
+    # 1. 共通メディア・品質ブラックリスト
+    if tags & COMMON_MEDIA_BLACKLIST:
+        return False, 0, "media_blacklist"
+    if tags & COMMON_QUALITY_BLACKLIST:
+        return False, 0, "quality_blacklist"
 
-    # ソロ女子判定（1girl必須、複数人除外）
-    if solo_girl_only and not is_solo_girl(post):
-        return False
+    # 2. 構図・遠景ブラックリスト（緩和フラグがオフの時のみ適用）
+    if not relax_composition:
+        comp_bl = set(req.excluded_compositions or []) | COMMON_DISTANT_BLACKLIST
+        if tags & comp_bl:
+            return False, 0, "composition_blacklist"
 
-    # 実写・3D調除外
-    if skip_realistic and is_realistic_style(post):
-        return False
+    # 3. 実写・3D調除外
+    if req.skip_realistic and is_realistic_style(post):
+        return False, 0, "realistic_style"
 
-    # ブラックリスト除外
-    if skip_blacklisted and is_blacklisted(post):
-        return False
+    # 4. Core共通ブラックリスト除外
+    if req.skip_blacklisted and is_blacklisted(post):
+        return False, 0, "core_blacklist"
 
-    return True
+    # 5. カテゴリ別除外タグ（未着用・全裸・プレイ外混入など）
+    if req.excluded_tags:
+        if tags & set(req.excluded_tags):
+            return False, 0, "category_excluded_tag"
+
+    # 6. 未着用 unworn_* パターン除外（衣装系・ヌード不許可時）
+    if not req.allow_nude:
+        if any(t.startswith("unworn_") for t in tags):
+            return False, 0, "unworn_clothes_pattern"
+        if bool({"completely_nude", "nude", "naked_dogeza"} & tags):
+            return False, 0, "unwanted_nude"
+
+    # 7. 主体（Subject）＆男性パートナー判定
+    has_girl = bool(tags & GIRL_TAGS) or any(t.endswith("girl") or t.endswith("girls") for t in tags)
+    is_pure_male_yaoi = not has_girl and bool({"1boy", "2boys", "3boys", "multiple_boys", "yaoi", "male_focus"} & tags)
+    if is_pure_male_yaoi or "yaoi" in tags:
+        return False, 0, "yaoi_forbidden"
+
+    if not req.allow_male_partner and bool({"1boy", "2boys", "3boys", "multiple_boys", "male_focus"} & tags):
+        return False, 0, "male_partner_forbidden"
+
+    req_subject = req.required_subject or ("1girl" if req.solo_girl_only else "girl")
+    if req_subject == "1girl":
+        if "1girl" not in tags or bool(tags & {"2girls", "3girls", "4girls", "5girls", "6+girls", "multiple_girls"}):
+            return False, 0, "subject_missing_1girl"
+    else:
+        if not has_girl:
+            return False, 0, "subject_missing_girl"
+
+    # 8. Tierスコアリング（孤立ポスト優先 ＆ 推奨ホワイト構図）
+    is_isolated = (post.get("parent_id") is None and not post.get("has_children")
+                   and not post.get("has_active_children") and not post.get("has_visible_children"))
+
+    preferred = set(req.preferred_compositions or [])
+    is_preferred = bool(preferred and (tags & preferred))
+
+    if is_isolated:
+        tier_score = 400 if is_preferred else 300
+    else:
+        tier_score = 200 if is_preferred else 100
+
+    if req.prefer_isolated is False:
+        tier_score = 400 if is_preferred else 300
+
+    return True, tier_score, "valid"
 
 
 @app.post("/posts/search")
 def search_posts_api(req: PostSearchRequest):
     """
     指定プロバイダ（Danbooru等）から条件に合致する投稿を検索するAPI。
-    select_one=True の場合は段階的フォールバック検索を行い、最適な2Dイラスト1件を返却。
+    select_one=True の場合は高度なホワイト/ブラックリスト判定＆Tier選定により、最適な2Dイラスト1件を返却。
     select_one=False の場合は合致する投稿リストを返却。
     """
     provider = (req.provider or "danbooru").lower()
@@ -761,24 +840,43 @@ def search_posts_api(req: PostSearchRequest):
 
             for q_str in queries:
                 try:
-                    posts = _batch_fetch_posts(provider, q_str, page=req.page or 1, limit=req.limit or 30)
+                    posts = _batch_fetch_posts(provider, q_str, page=req.page or 1, limit=req.limit or 40)
                 except Exception:
                     continue
                 if not posts or not isinstance(posts, list):
                     continue
 
+                # フェーズ1: 構図除外を厳格適用して評価
+                candidates = []
                 for p in posts:
-                    if _is_valid_search_candidate(p, rejected_ids, r_code,
-                                                  req.solo_girl_only, req.skip_realistic, req.skip_blacklisted):
-                        return {
-                            "status": "ok",
-                            "found": True,
-                            "post": p,
-                            "post_id": p.get("id"),
-                            "url": _batch_post_url(provider, p.get("id")),
-                            "rating": p.get("rating"),
-                            "matched_query": q_str,
-                        }
+                    ok, tier, _ = _evaluate_candidate_post(p, req, r_code, rejected_ids, relax_composition=False)
+                    if ok:
+                        dan_score = min(max(int(p.get("score") or 0), 0), 9999)
+                        total_rank = tier * 10000 + dan_score
+                        candidates.append((total_rank, tier, p))
+
+                # フェーズ2: 厳格判定で0件だった場合は構図除外を緩和して再評価
+                if not candidates:
+                    for p in posts:
+                        ok, tier, _ = _evaluate_candidate_post(p, req, r_code, rejected_ids, relax_composition=True)
+                        if ok:
+                            dan_score = min(max(int(p.get("score") or 0), 0), 9999)
+                            total_rank = tier * 10000 + dan_score
+                            candidates.append((total_rank, tier, p))
+
+                if candidates:
+                    candidates.sort(key=lambda x: x[0], reverse=True)
+                    best_rank, best_tier, best_post = candidates[0]
+                    return {
+                        "status": "ok",
+                        "found": True,
+                        "post": best_post,
+                        "post_id": best_post.get("id"),
+                        "url": _batch_post_url(provider, best_post.get("id")),
+                        "rating": best_post.get("rating"),
+                        "tier": best_tier,
+                        "matched_query": q_str,
+                    }
 
             return {
                 "status": "ok",
@@ -791,20 +889,37 @@ def search_posts_api(req: PostSearchRequest):
 
         else:
             try:
-                posts = _batch_fetch_posts(provider, target_tag, page=req.page or 1, limit=req.limit or 30)
+                posts = _batch_fetch_posts(provider, target_tag, page=req.page or 1, limit=req.limit or 40)
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+            candidates = []
             for p in posts:
-                if _is_valid_search_candidate(p, rejected_ids, r_code,
-                                              req.solo_girl_only, req.skip_realistic, req.skip_blacklisted):
-                    return {
-                        "status": "ok",
-                        "found": True,
-                        "post": p,
-                        "post_id": p.get("id"),
-                        "url": _batch_post_url(provider, p.get("id")),
-                        "rating": p.get("rating"),
-                    }
+                ok, tier, _ = _evaluate_candidate_post(p, req, r_code, rejected_ids, relax_composition=False)
+                if ok:
+                    dan_score = min(max(int(p.get("score") or 0), 0), 9999)
+                    candidates.append((tier * 10000 + dan_score, tier, p))
+
+            if not candidates:
+                for p in posts:
+                    ok, tier, _ = _evaluate_candidate_post(p, req, r_code, rejected_ids, relax_composition=True)
+                    if ok:
+                        dan_score = min(max(int(p.get("score") or 0), 0), 9999)
+                        candidates.append((tier * 10000 + dan_score, tier, p))
+
+            if candidates:
+                candidates.sort(key=lambda x: x[0], reverse=True)
+                _, best_tier, best_post = candidates[0]
+                return {
+                    "status": "ok",
+                    "found": True,
+                    "post": best_post,
+                    "post_id": best_post.get("id"),
+                    "url": _batch_post_url(provider, best_post.get("id")),
+                    "rating": best_post.get("rating"),
+                    "tier": best_tier,
+                }
+
             return {
                 "status": "ok",
                 "found": False,
@@ -814,17 +929,17 @@ def search_posts_api(req: PostSearchRequest):
                 "message": f"No suitable post found for '{target_tag}' on {provider}"
             }
 
-    # 2. リスト検索
+    # 2. リスト検索（select_one = False）
     else:
         try:
-            posts = _batch_fetch_posts(provider, target_tag, page=req.page or 1, limit=req.limit or 30)
+            posts = _batch_fetch_posts(provider, target_tag, page=req.page or 1, limit=req.limit or 40)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
         matched = []
         for p in posts:
-            if _is_valid_search_candidate(p, rejected_ids, r_code,
-                                          req.solo_girl_only, req.skip_realistic, req.skip_blacklisted):
+            ok, _, _ = _evaluate_candidate_post(p, req, r_code, rejected_ids, relax_composition=False)
+            if ok:
                 matched.append(p)
 
         return {
