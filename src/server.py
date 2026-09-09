@@ -832,10 +832,10 @@ def search_posts_api(req: PostSearchRequest):
             else:
                 r_filter = f"rating:{r_code}" if r_code else ""
                 queries = [
-                    f"order:score {target_tag} {r_filter} 1girl -comic -animated".strip(),
-                    f"order:score {target_tag} {r_filter} 1girl".strip(),
-                    f"order:score {target_tag} {r_filter} -comic -animated".strip(),
                     f"order:score {target_tag} {r_filter}".strip(),
+                    f"{target_tag} {r_filter}".strip(),
+                    f"{target_tag} 1girl".strip(),
+                    f"{target_tag}".strip(),
                 ]
 
             for q_str in queries:
