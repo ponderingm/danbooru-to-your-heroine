@@ -51,7 +51,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Optional, Any, List, Dict
 
 import urllib.parse
 import requests
@@ -672,6 +672,167 @@ def _batch_post_url(provider: str, post_id: Any) -> str:
     elif provider == "gelbooru":
         return f"https://gelbooru.com/index.php?page=post&s=view&id={post_id}"
     return f"https://danbooru.donmai.us/posts/{post_id}"
+
+
+class PostSearchRequest(BaseModel):
+    tag: Optional[str] = None
+    query: Optional[str] = None
+    rating: Optional[str] = "general"
+    rejected_ids: Optional[List[int]] = None
+    provider: Optional[str] = "danbooru"
+    limit: Optional[int] = 30
+    page: Optional[int] = 1
+    solo_girl_only: Optional[bool] = True
+    skip_realistic: Optional[bool] = True
+    skip_blacklisted: Optional[bool] = True
+    select_one: Optional[bool] = True
+
+
+def _is_valid_search_candidate(post: dict, rejected_ids: set, r_code: Optional[str],
+                               solo_girl_only: bool, skip_realistic: bool, skip_blacklisted: bool) -> bool:
+    pid = post.get("id")
+    if pid and (pid in rejected_ids or int(pid) in rejected_ids):
+        return False
+
+    # 静止画判定（動画・アニメーション・コミック等の除外）
+    ext = (post.get("file_ext") or "").lower()
+    if ext and ext not in {"jpg", "jpeg", "png", "webp"}:
+        return False
+
+    tags = set((post.get("tag_string") or "").split())
+    excluded = {"animated", "video", "webm", "mp4", "gif", "3d", "comic", "manga"}
+    if tags & excluded:
+        return False
+
+    # レーティング厳格一致判定（指定時のみ）
+    if r_code:
+        post_r = (post.get("rating") or "").lower()
+        if post_r != r_code:
+            return False
+
+    # ソロ女子判定（1girl必須、複数人除外）
+    if solo_girl_only and not is_solo_girl(post):
+        return False
+
+    # 実写・3D調除外
+    if skip_realistic and is_realistic_style(post):
+        return False
+
+    # ブラックリスト除外
+    if skip_blacklisted and is_blacklisted(post):
+        return False
+
+    return True
+
+
+@app.post("/posts/search")
+def search_posts_api(req: PostSearchRequest):
+    """
+    指定プロバイダ（Danbooru等）から条件に合致する投稿を検索するAPI。
+    select_one=True の場合は段階的フォールバック検索を行い、最適な2Dイラスト1件を返却。
+    select_one=False の場合は合致する投稿リストを返却。
+    """
+    provider = (req.provider or "danbooru").lower()
+    target_tag = (req.tag or req.query or "").strip()
+    rejected_ids = set(req.rejected_ids or [])
+
+    rating_map = {"general": "g", "sensitive": "s", "questionable": "q", "explicit": "e"}
+    r_code = None
+    if req.rating and req.rating.lower() not in ("all", "any", "none", "*"):
+        r_code = rating_map.get(req.rating.lower(), req.rating.lower()[:1])
+
+    # 1. 最適な1件を抽出（オンデマンド生成・再生成用）
+    if req.select_one:
+        if not target_tag:
+            raise HTTPException(status_code=400, detail="tag または query を指定してください")
+
+        if provider == "danbooru":
+            has_meta = "order:" in target_tag or "rating:" in target_tag
+            if has_meta:
+                queries = [target_tag]
+            else:
+                r_filter = f"rating:{r_code}" if r_code else ""
+                queries = [
+                    f"order:score {target_tag} {r_filter} 1girl -comic -animated".strip(),
+                    f"order:score {target_tag} {r_filter} 1girl".strip(),
+                    f"order:score {target_tag} {r_filter} -comic -animated".strip(),
+                    f"order:score {target_tag} {r_filter}".strip(),
+                ]
+
+            for q_str in queries:
+                try:
+                    posts = _batch_fetch_posts(provider, q_str, page=req.page or 1, limit=req.limit or 30)
+                except Exception:
+                    continue
+                if not posts or not isinstance(posts, list):
+                    continue
+
+                for p in posts:
+                    if _is_valid_search_candidate(p, rejected_ids, r_code,
+                                                  req.solo_girl_only, req.skip_realistic, req.skip_blacklisted):
+                        return {
+                            "status": "ok",
+                            "found": True,
+                            "post": p,
+                            "post_id": p.get("id"),
+                            "url": _batch_post_url(provider, p.get("id")),
+                            "rating": p.get("rating"),
+                            "matched_query": q_str,
+                        }
+
+            return {
+                "status": "ok",
+                "found": False,
+                "post": None,
+                "post_id": None,
+                "url": None,
+                "message": f"No suitable post found for tag '{target_tag}' (rating: {req.rating})"
+            }
+
+        else:
+            try:
+                posts = _batch_fetch_posts(provider, target_tag, page=req.page or 1, limit=req.limit or 30)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+            for p in posts:
+                if _is_valid_search_candidate(p, rejected_ids, r_code,
+                                              req.solo_girl_only, req.skip_realistic, req.skip_blacklisted):
+                    return {
+                        "status": "ok",
+                        "found": True,
+                        "post": p,
+                        "post_id": p.get("id"),
+                        "url": _batch_post_url(provider, p.get("id")),
+                        "rating": p.get("rating"),
+                    }
+            return {
+                "status": "ok",
+                "found": False,
+                "post": None,
+                "post_id": None,
+                "url": None,
+                "message": f"No suitable post found for '{target_tag}' on {provider}"
+            }
+
+    # 2. リスト検索
+    else:
+        try:
+            posts = _batch_fetch_posts(provider, target_tag, page=req.page or 1, limit=req.limit or 30)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        matched = []
+        for p in posts:
+            if _is_valid_search_candidate(p, rejected_ids, r_code,
+                                          req.solo_girl_only, req.skip_realistic, req.skip_blacklisted):
+                matched.append(p)
+
+        return {
+            "status": "ok",
+            "found": len(matched) > 0,
+            "count": len(matched),
+            "posts": matched,
+        }
 
 
 def _entry_tags(entry: dict) -> set:
