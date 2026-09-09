@@ -133,6 +133,7 @@ class GenerateRequest(ConvertRequest):
     # （Web UIの「プレビュー→手動編集」フローで使用）
     prompt_override: Optional[str] = None
     is_batch: bool = False  # 自動バッチ生成によるジョブかどうか（Discord通知の@silent制御等に利用）
+    filename_prefix: Optional[str] = None  # 保存ファイル名のプレフィックス（指定時はこれを使用）
 
 
 def _resolve_settings(heroine: str, req: ConvertRequest):
@@ -407,7 +408,10 @@ def _do_generate(req: GenerateRequest) -> dict:
 
     canvas_size = compute_canvas_size(post_w, post_h)
     gen_width, gen_height = canvas_size if canvas_size else (req.width, req.height)
-    prefix = f"API_{source_site}_{post_id}_{int(time.time())}"
+    if req.filename_prefix and req.filename_prefix.strip():
+        prefix = req.filename_prefix.strip()
+    else:
+        prefix = f"API_{source_site}_{post_id}_{int(time.time())}"
 
     wf = build_workflow_for_backend(
         backend, prompt_text=prompt, negative_text=negative, filename_prefix=prefix,
