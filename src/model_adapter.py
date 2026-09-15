@@ -73,7 +73,7 @@ def adapt_prompt(raw_prompt, model_type="illustrious"):
 def get_negative_prompt(model_type="illustrious", allow_comic: bool = False):
     m = model_type.lower()
     if "anima" in m:
-        neg = "worst quality, low quality, score_1, score_2, score_3, 6 fingers, 6 toes, ai-generated, bad eyes, bad pupils, bad iris, bad hands, bad fingers, watermark, patreon logo, text, speech bubble, sound effects, logo, signature, scenery, distant character, small person, tiny figure, landscape focus, empty scene, wide panoramic view, background emphasis"
+        neg = "worst quality, low quality, score_1, score_2, score_3, 6 fingers, 6 toes, ai-generated, bad eyes, bad pupils, bad iris, bad hands, bad fingers, watermark, patreon logo, text, speech bubble, sound effects, logo, signature, scenery, distant character, small person, tiny figure, landscape focus, empty scene, wide panoramic view, background emphasis, censored, mosaic, mosaic censoring, bar censor"
     else:
         # 🎨 Illustrious-XL
         comic_tags = {"comic", "manga", "page", "panel", "border", "frame"}
@@ -82,7 +82,7 @@ def get_negative_prompt(model_type="illustrious", allow_comic: bool = False):
             "font", "logo", "watermark", "signature", "username", "artist name", "copyright name",
             "web address", "patreon logo", "twitter username", "speech bubble", "dialogue", "commentary",
             "sound effects", "subtitles", "comic", "manga", "page", "panel", "border", "frame", "ui",
-            "split screen", "censored", "blurry"
+            "split screen", "censored", "mosaic", "mosaic censoring", "bar censor", "blurry"
         ]
         if allow_comic:
             base_tags = [t for t in base_tags if t not in comic_tags]

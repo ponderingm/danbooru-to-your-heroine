@@ -134,6 +134,7 @@ class GenerateRequest(ConvertRequest):
     prompt_override: Optional[str] = None
     is_batch: bool = False  # 自動バッチ生成によるジョブかどうか（Discord通知の@silent制御等に利用）
     filename_prefix: Optional[str] = None  # 保存ファイル名のプレフィックス（指定時はこれを使用）
+    filename: Optional[str] = None  # 保存ファイル名そのものを指定（拡張子付きまたはベース名）
 
 
 def _resolve_settings(heroine: str, req: ConvertRequest):
@@ -408,7 +409,12 @@ def _do_generate(req: GenerateRequest) -> dict:
 
     canvas_size = compute_canvas_size(post_w, post_h)
     gen_width, gen_height = canvas_size if canvas_size else (req.width, req.height)
-    if req.filename_prefix and req.filename_prefix.strip():
+    
+    target_exact_filename = None
+    if getattr(req, "filename", None) and req.filename.strip():
+        target_exact_filename = os.path.basename(req.filename.strip())
+        prefix = os.path.splitext(target_exact_filename)[0]
+    elif req.filename_prefix and req.filename_prefix.strip():
         prefix = req.filename_prefix.strip()
     else:
         prefix = f"API_{source_site}_{post_id}_{int(time.time())}"
@@ -426,6 +432,26 @@ def _do_generate(req: GenerateRequest) -> dict:
 
     if not saved_files:
         raise HTTPException(status_code=504, detail="ComfyUIの生成がタイムアウトした")
+
+    # Core APIで明示的に filename が指定された場合、ComfyUI出力ファイルをCore側で直接その名前に確定保存する
+    if target_exact_filename and saved_files:
+        if not os.path.splitext(target_exact_filename)[1]:
+            orig_ext = os.path.splitext(saved_files[0])[1] or ".png"
+            target_exact_filename = f"{target_exact_filename}{orig_ext}"
+        
+        orig_fn = saved_files[0]
+        if orig_fn != target_exact_filename:
+            for directory in (config.OUTPUT_DIR, config.WEB_OUTPUT_DIR):
+                src_p = os.path.join(directory, orig_fn)
+                dst_p = os.path.join(directory, target_exact_filename)
+                if os.path.exists(src_p):
+                    if os.path.exists(dst_p) and os.path.abspath(src_p) != os.path.abspath(dst_p):
+                        try:
+                            os.remove(dst_p)
+                        except OSError:
+                            pass
+                    os.rename(src_p, dst_p)
+            saved_files[0] = target_exact_filename
 
     entry = {
         "post_id": post_id,
@@ -795,7 +821,9 @@ def _evaluate_candidate_post(post: dict, req: PostSearchRequest, r_code: Optiona
                    and not post.get("has_active_children") and not post.get("has_visible_children"))
 
     preferred = set(req.preferred_compositions or [])
-    is_preferred = bool(preferred and (tags & preferred))
+    # Tier 1 から multiple_views を全カテゴリ共通で除外（なければTier 2等へフォールバック）
+    has_multiple_views = "multiple_views" in tags
+    is_preferred = bool(preferred and (tags & preferred)) and not has_multiple_views
 
     if is_isolated:
         tier_score = 400 if is_preferred else 300
@@ -805,7 +833,11 @@ def _evaluate_candidate_post(post: dict, req: PostSearchRequest, r_code: Optiona
     if req.prefer_isolated is False:
         tier_score = 400 if is_preferred else 300
 
-    return True, tier_score, "valid"
+    reason = "valid"
+    if has_multiple_views and bool(preferred and (tags & preferred)):
+        reason = "valid_multiple_views_fallback"
+
+    return True, tier_score, reason
 
 
 @app.post("/posts/search")
@@ -1351,8 +1383,9 @@ def get_purge_tags():
     """Base層・User層・マージ後の全パージタグ一覧を取得"""
     base_meta = getattr(config, "BASE_RULES", {}).get("meta_purge", [])
     base_artifact = getattr(config, "BASE_RULES", {}).get("artifact_purge", [])
-    user_purge = getattr(config, "USER_CONFIG", {}).get("purge_tags", [])
-    user_unpurge = getattr(config, "USER_CONFIG", {}).get("unpurge_tags", [])
+    user_cfg = getattr(config, "USER_CONFIG", {})
+    user_purge = user_cfg.get("purge_tags") or user_cfg.get("user_purge_tags") or []
+    user_unpurge = user_cfg.get("unpurge_tags") or user_cfg.get("user_unpurge_tags") or []
     return {
         "effective_purge_tags": sorted(list(getattr(config, "EXTRA_PURGE_TAGS", []))),
         "user_purge_tags": sorted(user_purge),
@@ -1366,10 +1399,13 @@ def get_purge_tags():
 def update_purge_tags(req: PurgeTagsRequest):
     """WebUIからUser層のパージタグを更新し、即座にconfig.yamlへ保存＆ホットリロード"""
     config.save_user_purge_tags(req.purge_tags, req.unpurge_tags)
+    user_cfg = getattr(config, "USER_CONFIG", {})
+    saved_purge = user_cfg.get("purge_tags") or user_cfg.get("user_purge_tags") or []
+    saved_unpurge = user_cfg.get("unpurge_tags") or user_cfg.get("user_unpurge_tags") or []
     return {
         "status": "ok",
-        "user_purge_tags": sorted(getattr(config, "USER_CONFIG", {}).get("purge_tags", [])),
-        "user_unpurge_tags": sorted(getattr(config, "USER_CONFIG", {}).get("unpurge_tags", [])),
+        "user_purge_tags": sorted(saved_purge),
+        "user_unpurge_tags": sorted(saved_unpurge),
         "total_effective": len(getattr(config, "EXTRA_PURGE_TAGS", [])),
     }
 

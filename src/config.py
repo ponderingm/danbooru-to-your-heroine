@@ -107,13 +107,34 @@ def reload_config() -> None:
     OTHER_KNOWN_CHARACTER_TAGS = set(USER_CONFIG.get("other_known_character_tags", []))
 
     # 5. ルールマージ（Base層 + User層 - User除外解除）
-    user_purge = {t.replace("_", " ").lower() for t in USER_CONFIG.get("purge_tags", [])}
-    user_unpurge = {t.replace("_", " ").lower() for t in USER_CONFIG.get("unpurge_tags", [])}
+    user_purge_raw = USER_CONFIG.get("purge_tags") or USER_CONFIG.get("user_purge_tags") or []
+    user_unpurge_raw = USER_CONFIG.get("unpurge_tags") or USER_CONFIG.get("user_unpurge_tags") or []
+    user_block_raw = USER_CONFIG.get("block_tags") or USER_CONFIG.get("user_block_tags") or []
+
+    user_purge = {t.replace("_", " ").lower() for t in user_purge_raw}
+    user_unpurge = {t.replace("_", " ").lower() for t in user_unpurge_raw}
     base_meta = {t.replace("_", " ").lower() for t in BASE_RULES.get("meta_purge", [])}
     base_artifact = {t.replace("_", " ").lower() for t in BASE_RULES.get("artifact_purge", [])}
-    EXTRA_PURGE_TAGS = (user_purge | base_meta | base_artifact) - user_unpurge
 
-    user_block = {t.replace("_", " ").lower() for t in USER_CONFIG.get("block_tags", [])}
+    # gray <-> grey の英米綴り同義語展開（パージ漏れ・不整合を完全防止）
+    purge_variants = set()
+    for t in (user_purge | base_meta | base_artifact):
+        if "grey" in t:
+            purge_variants.add(t.replace("grey", "gray"))
+        if "gray" in t:
+            purge_variants.add(t.replace("gray", "grey"))
+
+    unpurge_variants = set()
+    for t in user_unpurge:
+        if "grey" in t:
+            unpurge_variants.add(t.replace("grey", "gray"))
+        if "gray" in t:
+            unpurge_variants.add(t.replace("gray", "grey"))
+    user_unpurge |= unpurge_variants
+
+    EXTRA_PURGE_TAGS = ((user_purge | base_meta | base_artifact | purge_variants) - user_unpurge)
+
+    user_block = {t.replace("_", " ").lower() for t in user_block_raw}
     base_block = {t.replace("_", " ").lower() for t in BASE_RULES.get("default_block_tags", [])}
     GENERATION_BLACKLIST_TAGS = user_block | base_block
 

@@ -6,7 +6,9 @@ src/config.yaml
 database/*.json
 database/*.yaml
 database/*.csv
+database/*.lock
 database/backups/
+database/manifest_backups/
 !database/.gitkeep
 
 

@@ -1,6 +1,7 @@
 const API_BASE = ""; // 同一オリジン配信なので空文字（相対パス）でOK
 const GALLERY_PAGE_SIZE = 30;
 const JOB_POLL_INTERVAL_MS = 1500;
+const GALLERY_FILTER_TAG_MAX_LENGTH = 24;
 
 // anima記法のrating語(safe/sensitive/nsfw/explicit) → Illustrious記法(rating:xxx)への
 // エイリアス。model_adapter.pyのRATING_TAG_ALIASESと同じ対応関係（サーバ側にも別途実装あり）
@@ -1321,14 +1322,23 @@ async function loadComfyStatus() {
   }
 }
 
+function formatDisplayTag(tag, maxLen = GALLERY_FILTER_TAG_MAX_LENGTH) {
+  if (!tag || tag.length <= maxLen) return tag;
+  return `${tag.slice(0, maxLen)}…`;
+}
+
 async function loadTags() {
   const res = await fetch(`${API_BASE}/tags`);
   const data = await res.json();
   const addable = data.tags.filter(({ tag }) => !selectedTags.has(tag));
   filterTagSelect.innerHTML = `<option value="">タグを選択して追加</option>` + addable
-    .map(({ tag, count }) => `<option value="${escapeHtml(tag)}">${escapeHtml(tag)} (${count})</option>`)
+    .map(({ tag, count }) => {
+      const displayTag = formatDisplayTag(tag, GALLERY_FILTER_TAG_MAX_LENGTH);
+      return `<option value="${escapeHtml(tag)}" title="${escapeHtml(tag)} (${count})">${escapeHtml(displayTag)} (${count})</option>`;
+    })
     .join("");
 }
+
 
 function renderTagChips() {
   filterTagChips.innerHTML = [...selectedTags].map((tag) => `

@@ -135,6 +135,8 @@ other_known_character_tags: []
 # プロンプトから削る追加タグ（画像生成は行う）
 purge_tags:
   - "speech bubble"
+  - "grayscale"
+  - "greyscale"
 
 # 生成自体を破棄・スキップするタグ（バッチ生成用）
 block_tags:

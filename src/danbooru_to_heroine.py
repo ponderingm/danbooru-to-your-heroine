@@ -248,6 +248,9 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     # メタタグ → 不要な投稿管理タグを除去して保持
     for tag in meta_tags:
         tag_norm = tag.replace("_", " ").lower()
+        if tag_norm in blacklist:
+            removed_tags.append(tag_norm)
+            continue
         if tag_norm in META_TAG_BLACKLIST:
             removed_tags.append(tag_norm)
             continue
@@ -293,11 +296,32 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     dark_skin_set = getattr(config, "DARK_SKIN_TAGS", set())
     art_style_set = build_art_style_set()
 
-    # 一般タグ → ブラックリスト除去 → 構図・服装として保持
+    # 一般タグ → ブラックリスト・パージタグ除去 → 構図・服装として保持
     for tag in general_tags:
         tag_norm = tag.replace("_", " ").lower()
 
-        # 画風判定（オーバーライドルール: source = 元絵維持, それ以外は元絵画風を全パージして指定画風へ転換）
+        # 1. 優先除外判定（ネガティブ・ブロック・パージ・検閲ノイズ・別キャラ属性）
+        if tag_norm in negative_tags:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in blacklist:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in purge_set:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in CENSORING_BLACKLIST:
+            removed_tags.append(tag_norm)
+            continue
+
+        if tag_norm in known_character_tags:
+            removed_tags.append(tag_norm)
+            continue
+
+        # 2. 画風判定（オーバーライドルール: source = 元絵維持, それ以外は元絵画風を全パージして指定画風へ転換）
         if tag_norm in art_style_set:
             if art_style_mode == "source":
                 situation_tags.append(tag.replace("_", " "))
@@ -307,7 +331,7 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                 removed_tags.append(tag_norm)
                 continue
 
-        # 胸サイズ判定（オーバーライドルール: strict = ヒロイン固定, source = 元絵維持）
+        # 3. 胸サイズ判定（オーバーライドルール: strict = ヒロイン固定, source = 元絵維持）
         if tag_norm in BREAST_TAGS:
             if breasts_mode == "source":
                 situation_tags.append(tag.replace("_", " "))
@@ -317,7 +341,7 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                 removed_tags.append(tag_norm)
                 continue
 
-        # 肌色判定（スマート肌色ポリシー: strict = ヒロイン固定, source = 元絵維持）
+        # 4. 肌色判定（スマート肌色ポリシー: strict = ヒロイン固定, source = 元絵維持）
         if tag_norm in skin_tags_set or tag_norm in monster_skin_set:
             if skin_mode == "source":
                 # モンスター肌（blue skin, slime girl等）なら元絵を優先維持
@@ -338,26 +362,6 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
             else:
                 removed_tags.append(tag_norm)
                 continue
-
-        if tag_norm in negative_tags:
-            removed_tags.append(tag_norm)
-            continue
-
-        if tag_norm in blacklist:
-            removed_tags.append(tag_norm)
-            continue
-
-        if tag_norm in purge_set:
-            removed_tags.append(tag_norm)
-            continue
-
-        if tag_norm in CENSORING_BLACKLIST:
-            removed_tags.append(tag_norm)
-            continue
-
-        if tag_norm in known_character_tags:
-            removed_tags.append(tag_norm)
-            continue
 
         situation_tags.append(tag.replace("_", " "))
 
@@ -419,8 +423,10 @@ def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list
     if quality_prefix is None:
         quality_prefix = ["masterpiece", "best quality", "highly detailed"]
 
-    quality_in_situation = [t for t in situation_tags if t.lower() in QUALITY_TAGS]
-    rest_situation = [t for t in situation_tags if t.lower() not in QUALITY_TAGS]
+    purge_set = build_purge_set()
+    filtered_situation = [t for t in situation_tags if t.replace("_", " ").lower() not in purge_set]
+    quality_in_situation = [t for t in filtered_situation if t.lower() in QUALITY_TAGS]
+    rest_situation = [t for t in filtered_situation if t.lower() not in QUALITY_TAGS]
 
     all_quality = quality_prefix[:]
     for t in quality_in_situation:

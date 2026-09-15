@@ -264,7 +264,13 @@ main {
   border: 1px solid var(--border);
   background: #101116;
   color: var(--text);
+  max-width: 260px;
 }
+
+#filter-tag-select {
+  max-width: 260px;
+}
+
 
 .form-row label.checkbox {
   flex-direction: row;
@@ -1394,6 +1400,24 @@ textarea {
     max-width: calc(100vw - 16px) !important;
     min-width: 280px !important;
   }
+
+  /* ギャラリーのフィルター・タグ追加セレクトの横幅崩れ対策 */
+  .form-row label {
+    max-width: 100%;
+  }
+
+  .form-row select,
+  .form-row input[type="date"] {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  #filter-tag-select {
+    width: 100%;
+    max-width: calc(100vw - 56px);
+    box-sizing: border-box;
+  }
+
 
   /* 📱 スマホ用イラストポップアップ（ライトボックス）レイアウト最適化 */
   .lightbox img {
