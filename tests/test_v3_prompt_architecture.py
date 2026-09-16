@@ -114,3 +114,23 @@ def test_slot_driven_mutation():
     assert "small breasts" in joined_identity
     assert "brown hair" in joined_identity
 
+
+def test_female_only_multi_subject():
+    """2girls / yuri 等の女子ペア構図で 1boy が絶対に含まれないか"""
+    identity_tags = ["1girl", "dark skin", "small breasts"]
+    situation_tags = ["masterpiece", "2girls", "yuri", "straddling", "uniform", "bedroom"]
+
+    # Illustrious
+    ill_prompt = build_prompt(identity_tags, situation_tags, model_type="illustrious")
+    assert "1boy" not in ill_prompt
+    assert "hetero" not in ill_prompt
+    assert "2girls" in ill_prompt
+
+    # Anima
+    anima_prompt = build_prompt(identity_tags, situation_tags, model_type="anima", heroine_name="Yukikaze")
+    assert "1boy" not in anima_prompt
+    assert "hetero" not in anima_prompt
+    assert "2girls" in anima_prompt
+    assert "1girl (Yukikaze)" in anima_prompt
+
+

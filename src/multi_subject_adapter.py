@@ -80,7 +80,9 @@ def separate_multi_subject_tags(
 
         # 人数・主体
         if parent == "subject":
-            if "boy" in low_t or "male" in low_t:
+            if any(k in low_t for k in ("2girls", "3girls", "multiple girls", "multiple boys")):
+                common_meta_slots.append(t)
+            elif "boy" in low_t or "male" in low_t:
                 male_slots.append(t)
             elif "girl" in low_t or "female" in low_t:
                 female_dna_slots.setdefault("subject.gender", t)
@@ -130,10 +132,16 @@ def build_illustrious_multi_prompt(separated: Dict[str, Any]) -> str:
         else:
             promoted_female_dna.append(t)
 
+    has_male = bool(separated["male_tags"]) or any(
+        any(k in t.lower() for k in ("1boy", "2boys", "multiple boys", "hetero", "yaoi"))
+        for t in separated["meta_tags"]
+    )
+
     # チャンク1: 品質・メタ ＋ アクション・構図・環境
+    gender_meta = ["1girl", "1boy", "hetero"] if has_male else []
     chunk1_tags = sorter.sort_tags(
         separated["meta_tags"]
-        + ["1girl", "1boy", "hetero"]
+        + [t for t in gender_meta if t not in separated["meta_tags"]]
         + separated["action_costume_tags"]
         + separated["env_tags"]
         + separated["unknown_tags"]
@@ -144,9 +152,11 @@ def build_illustrious_multi_prompt(separated: Dict[str, Any]) -> str:
     chunk2_tags = [t for t in sorter.sort_tags(promoted_female_dna) if t.lower() != "1girl"]
     chunk2_str = ", ".join(["1girl"] + chunk2_tags)
 
-    # チャンク3: パートナー（男性側）完全隔離
-    chunk3_tags = [t for t in sorter.sort_tags(separated["male_tags"]) if t.lower() != "1boy"]
-    chunk3_str = ", ".join(["1boy"] + chunk3_tags) if chunk3_tags or "1boy" in [t.lower() for t in separated["male_tags"]] else ""
+    # チャンク3: パートナー（男性側）完全隔離（男性が存在する場合のみ）
+    chunk3_str = ""
+    if has_male:
+        chunk3_tags = [t for t in sorter.sort_tags(separated["male_tags"]) if t.lower() != "1boy"]
+        chunk3_str = ", ".join(["1boy"] + chunk3_tags) if chunk3_tags or "1boy" in [t.lower() for t in separated["male_tags"]] else "1boy"
 
     parts = [chunk1_str]
     if chunk2_str:
@@ -170,12 +180,19 @@ def build_anima_multi_prompt(separated: Dict[str, Any], heroine_name: str = "") 
     female_dna_clean = [t for t in sorter.sort_tags(separated["female_dna_tags"]) if t.lower() != "1girl"]
     female_dna_str = ", ".join(female_dna_clean)
 
-    male_dna_clean = [t for t in sorter.sort_tags(separated["male_tags"]) if t.lower() != "1boy"]
-    male_dna_str = ", ".join(male_dna_clean)
-
     name_clause = f" ({heroine_name})" if heroine_name else ""
     female_clause = f"1girl{name_clause} with ({female_dna_str})" if female_dna_str else f"1girl{name_clause}"
-    male_clause = f"1boy with ({male_dna_str})" if male_dna_str else "1boy"
+
+    has_male = bool(separated["male_tags"]) or any(
+        any(k in t.lower() for k in ("1boy", "2boys", "multiple boys", "hetero", "yaoi"))
+        for t in separated["meta_tags"]
+    )
+
+    male_clause = ""
+    if has_male:
+        male_dna_clean = [t for t in sorter.sort_tags(separated["male_tags"]) if t.lower() != "1boy"]
+        male_dna_str = ", ".join(male_dna_clean)
+        male_clause = f"1boy with ({male_dna_str})" if male_dna_str else "1boy"
 
     parts = [meta_str, female_clause, male_clause, action_str, env_str, unknown_str]
     return ", ".join([p for p in parts if p.strip()])
