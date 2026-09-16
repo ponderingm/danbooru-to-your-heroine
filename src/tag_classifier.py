@@ -185,7 +185,7 @@ class TagClassifier:
 
     def _infer_gemini(self, tags: List[str]) -> Dict[str, str]:
         key = os.environ.get("GEMINI_API_KEY") or getattr(config, "GEMINI_API_KEY", None)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={key}"
 
         payload = {
             "contents": [{"parts": [{"text": f"以下のタグリストを分類してください:\n{json.dumps({'tags_to_classify': tags}, ensure_ascii=False)}"}]}],
@@ -206,9 +206,11 @@ class TagClassifier:
         return self._validate_inferred(data)
 
     def _infer_ollama(self, tags: List[str]) -> Dict[str, str]:
-        url = "http://127.0.0.1:11434/api/generate"
+        base_url = getattr(config, "OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+        model_name = getattr(config, "OLLAMA_MODEL", "qwen2.5:latest")
+        url = f"{base_url}/api/generate"
         payload = {
-            "model": "qwen2.5:latest",
+            "model": model_name,
             "system": self._system_instruction,
             "prompt": f"以下のタグリストを分類してください:\n{json.dumps({'tags_to_classify': tags}, ensure_ascii=False)}",
             "format": "json",

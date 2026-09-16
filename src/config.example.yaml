@@ -91,6 +91,9 @@ gelbooru_user_id: null
 gelbooru_api_key: null
 civitai_api_key: null
 
+# ローカルLLM設定 (Ollama)
+ollama_url: "http://127.0.0.1:11434"
+ollama_model: "qwen2.5:latest"
 
 # バッチ停止しきい値
 max_consecutive_failures: 3

@@ -86,7 +86,7 @@ def classify_tags_chunk_gemini(
     tags: List[str],
     system_instruction: str,
     api_key: Optional[str] = None,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-flash-lite-latest",
 ) -> Dict[str, str]:
     """Gemini API を用いて1チャンク（50〜100タグ）を一括分類する"""
     key = api_key or os.environ.get("GEMINI_API_KEY") or getattr(config, "GEMINI_API_KEY", None)
@@ -136,15 +136,17 @@ def classify_tags_chunk_gemini(
 def classify_tags_chunk_ollama(
     tags: List[str],
     system_instruction: str,
-    model: str = "qwen2.5:latest",
-    ollama_url: str = "http://127.0.0.1:11434",
+    model: Optional[str] = None,
+    ollama_url: Optional[str] = None,
 ) -> Dict[str, str]:
     """Ollama API を用いて1チャンクを一括分類する"""
-    url = f"{ollama_url.rstrip('/')}/api/generate"
+    m = model or getattr(config, "OLLAMA_MODEL", "qwen2.5:latest")
+    base = (ollama_url or getattr(config, "OLLAMA_URL", "http://127.0.0.1:11434")).rstrip("/")
+    url = f"{base}/api/generate"
     prompt_payload = {"tags_to_classify": tags}
 
     payload = {
-        "model": model,
+        "model": m,
         "system": system_instruction,
         "prompt": f"以下のタグリストを分類してください:\n{json.dumps(prompt_payload, ensure_ascii=False)}",
         "format": "json",
@@ -195,6 +197,8 @@ def main():
     parser.add_argument("--min-count", type=int, default=2, help="対象とするタグの最低出現回数 (デフォルト: 2)")
     parser.add_argument("--chunk-size", type=int, default=50, help="LLMへの1リクエストあたりのタグ数 (デフォルト: 50)")
     parser.add_argument("--provider", choices=["auto", "gemini", "ollama"], default="auto", help="LLMプロバイダ")
+    parser.add_argument("--model", type=str, default=None, help="使用モデル名 (未指定時はconfig.yamlまたはデフォルト)")
+    parser.add_argument("--ollama-url", type=str, default=None, help="OllamaサーバーURL (未指定時はconfig.yamlまたはデフォルト)")
     parser.add_argument("--target", choices=["user", "base"], default="user", help="保存先: user (database/tags_classification_user.json) または base (src/rules/tags_classification_base.json)")
     parser.add_argument("--dry-run", action="store_true", help="LLMを呼ばずにタグ集計と対象件数のみ表示")
 
@@ -258,9 +262,9 @@ def main():
         for attempt in range(1, max_retries + 1):
             try:
                 if provider == "gemini":
-                    classified = classify_tags_chunk_gemini(chunk, system_instruction)
+                    classified = classify_tags_chunk_gemini(chunk, system_instruction, model=args.model or "gemini-flash-lite-latest")
                 else:
-                    classified = classify_tags_chunk_ollama(chunk, system_instruction)
+                    classified = classify_tags_chunk_ollama(chunk, system_instruction, model=args.model, ollama_url=args.ollama_url)
                 break
             except Exception as e:
                 print(f"⚠️ チャンク {chunk_num} (試行 {attempt}/{max_retries}) でエラー: {e}")
@@ -268,6 +272,8 @@ def main():
                     time.sleep(3)
                 else:
                     print(f"❌ チャンク {chunk_num} の分類をスキップします")
+
+        valid_chunk = validate_classified_chunk(classified)
 
         # Base層への書き込み時はキャラ名・特定絵師・シリーズ名を完全除去するフィルタ
         if args.target == "base":

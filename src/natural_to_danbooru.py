@@ -29,7 +29,7 @@ def load_system_instruction() -> str:
     return PROMPT_FILE.read_text(encoding="utf-8")
 
 
-def convert_natural_to_tags_gemini(text: str, api_key: Optional[str] = None, model: str = "gemini-2.5-flash") -> str:
+def convert_natural_to_tags_gemini(text: str, api_key: Optional[str] = None, model: str = "gemini-flash-lite-latest") -> str:
     """Gemini API (REST) を直接呼び出して自然言語からタグを抽出する"""
     key = api_key or os.environ.get("GEMINI_API_KEY") or getattr(config, "GEMINI_API_KEY", None)
     if not key:
