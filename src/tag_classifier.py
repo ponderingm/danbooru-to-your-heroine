@@ -20,6 +20,7 @@ import config
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BASE_DB_PATH = PROJECT_ROOT / "src" / "rules" / "tags_classification_base.json"
+USER_DB_PATH = PROJECT_ROOT / "database" / "tags_classification_user.json"
 CACHE_DB_PATH = PROJECT_ROOT / "database" / "tags_classification_cache.json"
 PROMPT_FILE = PROJECT_ROOT / "src" / "prompts" / "tag_classification_system_instruction.md"
 
@@ -55,10 +56,10 @@ class TagClassifier:
         self.reload()
 
     def reload(self):
-        """Base層とUser層の辞書を再読込してメモリ展開する"""
+        """Base層、User層、Cache層の辞書を再読込してメモリ展開する"""
         with self._file_lock:
             new_db = {}
-            # 1. Base層（Git管理・共通マスター）
+            # 1. Base層（Git管理・普遍マスター辞書）
             if BASE_DB_PATH.exists():
                 try:
                     base_data = json.loads(BASE_DB_PATH.read_text(encoding="utf-8"))
@@ -66,7 +67,15 @@ class TagClassifier:
                 except Exception as e:
                     print(f"Warning: Failed to load Base tag classification DB: {e}")
 
-            # 2. User層（ローカル自動キャッシュ）
+            # 2. User層（ローカル固有設定・マニフェスト由来・.gitignore）
+            if USER_DB_PATH.exists():
+                try:
+                    user_data = json.loads(USER_DB_PATH.read_text(encoding="utf-8"))
+                    new_db.update(user_data)
+                except Exception as e:
+                    print(f"Warning: Failed to load User tag classification DB: {e}")
+
+            # 3. Cache層（オンデマンド自動学習キャッシュ・.gitignore）
             if CACHE_DB_PATH.exists():
                 try:
                     cache_data = json.loads(CACHE_DB_PATH.read_text(encoding="utf-8"))

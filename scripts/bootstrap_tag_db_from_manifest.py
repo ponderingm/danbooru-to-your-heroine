@@ -195,9 +195,14 @@ def main():
     parser.add_argument("--min-count", type=int, default=2, help="対象とするタグの最低出現回数 (デフォルト: 2)")
     parser.add_argument("--chunk-size", type=int, default=50, help="LLMへの1リクエストあたりのタグ数 (デフォルト: 50)")
     parser.add_argument("--provider", choices=["auto", "gemini", "ollama"], default="auto", help="LLMプロバイダ")
+    parser.add_argument("--target", choices=["user", "base"], default="user", help="保存先: user (database/tags_classification_user.json) または base (src/rules/tags_classification_base.json)")
     parser.add_argument("--dry-run", action="store_true", help="LLMを呼ばずにタグ集計と対象件数のみ表示")
 
     args = parser.parse_args()
+
+    USER_DB_PATH = PROJECT_ROOT / "database" / "tags_classification_user.json"
+    target_path = BASE_DB_PATH if args.target == "base" else USER_DB_PATH
+    print(f"🎯 保存対象レイヤー: {args.target.upper()} ({target_path})")
 
     print("📊 マニフェストからタグ頻度を集計中...")
     tags_with_count = extract_tags_from_manifest(min_count=args.min_count)
@@ -205,9 +210,9 @@ def main():
 
     # 既存DBのロード（差分学習のため）
     existing_db: Dict[str, str] = {}
-    if BASE_DB_PATH.exists():
+    if target_path.exists():
         try:
-            existing_db = json.loads(BASE_DB_PATH.read_text(encoding="utf-8"))
+            existing_db = json.loads(target_path.read_text(encoding="utf-8"))
             print(f"既存の分類DBロード完了: {len(existing_db)} 件登録済み")
         except Exception as e:
             print(f"既存DB読み込み失敗 (新規作成します): {e}")
@@ -264,21 +269,29 @@ def main():
                 else:
                     print(f"❌ チャンク {chunk_num} の分類をスキップします")
 
-        valid_chunk = validate_classified_chunk(classified)
+        # Base層への書き込み時はキャラ名・特定絵師・シリーズ名を完全除去するフィルタ
+        if args.target == "base":
+            filtered_chunk = {}
+            for t, s in valid_chunk.items():
+                if any(k in t for k in ['yukikaze', 'taimanin', 'asagi', 'sakura', 'mizuki']) or t.startswith('@'):
+                    continue
+                filtered_chunk[t] = s
+            valid_chunk = filtered_chunk
+
         existing_db.update(valid_chunk)
         success_count += len(valid_chunk)
         print(f"  -> {len(valid_chunk)} 件の分類に成功 (有効率: {len(valid_chunk)}/{len(chunk)})")
 
         # 随時セーブして安全性を担保
-        BASE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        BASE_DB_PATH.write_text(json.dumps(existing_db, ensure_ascii=False, indent=2), encoding="utf-8")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(json.dumps(existing_db, ensure_ascii=False, indent=2), encoding="utf-8")
 
         # APIレートリミット配慮
         if provider == "gemini":
             time.sleep(0.5)
 
     print(f"\n🎉 バッチ分類完了！ 新規登録: {success_count} 件, DB総登録数: {len(existing_db)} 件")
-    print(f"保存先: {BASE_DB_PATH}")
+    print(f"保存先: {target_path}")
 
 
 if __name__ == "__main__":
