@@ -2083,6 +2083,37 @@ function renderPurgeChips() {
   }
 }
 
+async function loadVersionInfo() {
+  const badgeEl = document.getElementById("version-badge");
+  if (!badgeEl) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/version`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const commitLink = data.commit_url
+      ? `<a href="${data.commit_url}" target="_blank" rel="noopener" title="Git Commit: ${data.full_commit}">${data.commit}</a>`
+      : data.commit;
+
+    if (data.is_preview) {
+      badgeEl.classList.add("preview");
+      const prLink = data.pr_url
+        ? `<a href="${data.pr_url}" target="_blank" rel="noopener" title="Pull Request #${data.pr_id}">PR#${data.pr_id}</a>`
+        : (data.pr_id ? `PR#${data.pr_id}` : "Preview");
+
+      badgeEl.innerHTML = `${data.version} <span class="badge-tag">${prLink}</span> (${commitLink})`;
+      document.title = `danbooru-to-your-heroine ${data.version} [PR#${data.pr_id || "preview"}] (${data.commit})`;
+    } else {
+      badgeEl.classList.remove("preview");
+      badgeEl.innerHTML = `${data.version} (${commitLink})`;
+      document.title = `danbooru-to-your-heroine ${data.version} (${data.commit})`;
+    }
+  } catch (err) {
+    console.warn("Failed to load version info:", err);
+  }
+}
+
 async function loadPurgeTags() {
   try {
     const res = await fetch(`${API_BASE}/purge_tags`);
@@ -2882,6 +2913,7 @@ document.addEventListener("click", (e) => {
   }
 
   // 設定系やステータスポーリングはバックグラウンドで非同期読み込み
+  loadVersionInfo();
   loadPurgeTags();
   loadBackups();
   loadNotificationConfig();

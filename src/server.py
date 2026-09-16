@@ -47,6 +47,8 @@ import itertools
 import json
 import os
 import queue
+import re
+import subprocess
 import threading
 import time
 import uuid
@@ -85,6 +87,9 @@ from site_adapters import UnifiedPost
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(PROJECT_ROOT, "database", "generated_manifest.json")
 MANIFEST_LOCK = threading.Lock()
+APP_VERSION = "v3.0.0"
+REPO_URL = "https://github.com/ponderingm/danbooru-to-your-heroine"
+GIT_TIMEOUT_SEC = 2
 
 app = FastAPI(title="danbooru-to-your-heroine API")
 
@@ -1504,6 +1509,53 @@ def update_site_auth_config(req: SiteAuthConfigRequest):
         gelbooru_api_key=req.gelbooru_api_key,
     )
     return {"status": "ok"}
+
+
+@app.get("/version")
+def get_version():
+    """バージョン情報・Gitコミット・ブランチ・デプロイ環境種別を返す"""
+    commit = os.environ.get("SOURCE_COMMIT") or os.environ.get("GIT_COMMIT")
+    if not commit:
+        try:
+            res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=GIT_TIMEOUT_SEC)
+            if res.returncode == 0:
+                commit = res.stdout.strip()
+        except Exception:
+            pass
+    commit = commit or "unknown"
+    short_commit = commit[:7] if commit != "unknown" else "unknown"
+
+    branch = os.environ.get("COOLIFY_BRANCH")
+    if not branch:
+        try:
+            res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=GIT_TIMEOUT_SEC)
+            if res.returncode == 0:
+                branch = res.stdout.strip()
+        except Exception:
+            pass
+    branch = branch or "unknown"
+
+    container_name = os.environ.get("COOLIFY_CONTAINER_NAME", "")
+
+    # プレビュー環境判定 (PR ID 抽出)
+    pr_id = None
+    pr_match = re.search(r"pull/(\d+)/", branch) or re.search(r"-pr-(\d+)", container_name)
+    if pr_match:
+        pr_id = pr_match.group(1)
+
+    is_preview = bool(pr_id or "-pr-" in container_name or "pull/" in branch)
+
+    return {
+        "version": APP_VERSION,
+        "commit": short_commit,
+        "full_commit": commit,
+        "branch": branch,
+        "is_preview": is_preview,
+        "pr_id": pr_id,
+        "repo_url": REPO_URL,
+        "commit_url": f"{REPO_URL}/commit/{commit}" if commit != "unknown" else None,
+        "pr_url": f"{REPO_URL}/pull/{pr_id}" if pr_id else None,
+    }
 
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
