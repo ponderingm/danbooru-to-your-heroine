@@ -195,7 +195,7 @@ def _convert(req: ConvertRequest):
     )
     identity_tags, situation_tags, _removed = res[0], res[1], res[2]
     extra_neg = getattr(res, "extra_negative_tags", [])
-    base_prompt = build_prompt(identity_tags, situation_tags)
+    base_prompt = build_prompt(identity_tags, situation_tags, model_type=model, heroine_name=heroine)
     booru_prompt = adapt_prompt(base_prompt, model_type=model)
 
     raw_prompt_heroine = None

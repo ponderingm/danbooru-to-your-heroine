@@ -107,19 +107,29 @@ discord:
   include_image: true       # 成功通知に生成画像の実体を添付するか
 
 # ─────────────────────────────────────────────
-# ヒロイン定義
+# ヒロイン定義 (v3 スロット構造化スキーマ)
 # ─────────────────────────────────────────────
 heroines:
   example_heroine:
     name: "サンプルヒロイン"
-    identity_tags:
-      - "example_character_name"
-      - "example_series"
-    body_tags:
-      - "fair skin"
-      - "medium breasts"
-      - "long hair"
-      - "blue eyes"
+    identity:
+      character: "example_character_name"
+      series: "example_series"
+    dna:
+      hair:
+        color: "brown hair"
+        style: "long hair"
+      face:
+        eyes: "blue eyes"
+      body:
+        skin: "fair skin"
+        breasts: "medium breasts"
+    costume:
+      default: []
+    override_rules:
+      breasts: "strict"
+      skin: "strict"
+      costume: "source"
     artist_tags: []
     negative_tags:
       - "example unwanted tag"
