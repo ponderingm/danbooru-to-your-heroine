@@ -624,6 +624,27 @@
                   </div>
                 </div>
 
+                <!-- 6. 👥 複数人構図戦略デフォルト -->
+                <div class="option-card" style="background: #181a26; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-top: 8px;">
+                  <div style="font-size: 0.85rem; font-weight: bold; color: #ffb86c; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>👥 複数人構図デフォルト戦略</span>
+                    <span class="help-tip" data-tooltip="【カプセル】ヒロインDNAを完全隔離(標準)&#10;【フラット】境界を作らず全体に分散(v2風)&#10;【衣装共有】ヒロインにも衣装タグを共有注入(両方着衣)">?</span>
+                  </div>
+                  <div class="form-row" style="align-items: flex-end; gap: 12px;">
+                    <label style="flex: 1.2; margin: 0;">
+                      デフォルトルール
+                      <select id="hm-rule-multi-mode" style="padding: 4px 8px; font-size: 0.82rem;">
+                        <option value="capsule">🔒 カプセル分離 (標準)</option>
+                        <option value="flat">🌐 フラット分散 (v2風)</option>
+                        <option value="shared_costume">👗 衣装共有 (両方着衣)</option>
+                      </select>
+                    </label>
+                    <div style="flex: 2; font-size: 0.76rem; color: var(--text-dim); line-height: 1.4; padding-bottom: 4px;">
+                      ※ 複数人構図（2girls / 1girl 1boy 等）生成時、このヒロインに優先適用される構文戦略です。
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
               <p id="hm-status" class="status"></p>
@@ -789,7 +810,7 @@
 
 
 
-<script src="app.js?v=20260916_2205"></script>
+<script src="app.js?v=20260916_2230"></script>
 </body>
 </html>
 

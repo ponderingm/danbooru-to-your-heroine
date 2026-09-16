@@ -288,14 +288,137 @@ def save_site_auth_config(civitai_api_key: str = None, danbooru_login: str = Non
     reload_config()
 
 
-def save_heroine(heroine_key: str, heroine_data: dict) -> None:
+def normalize_heroine_v3_schema(raw: dict) -> dict:
+    """
+    ヒロイン設定辞書を v3 の 7大スロット階層スキーマに完全正規化する。
+    旧形式（face_tags, body_tags等のフラット配列）が渡された場合も自動で階層化する。
+    """
+    if not isinstance(raw, dict):
+        return {}
 
+    result = {
+        "name": raw.get("name", ""),
+    }
+
+    # 1. identity
+    ident = raw.get("identity")
+    if isinstance(ident, dict):
+        result["identity"] = dict(ident)
+    else:
+        ident_tags = raw.get("identity_tags", [])
+        if isinstance(ident_tags, str):
+            ident_tags = [t.strip() for t in ident_tags.split(",") if t.strip()]
+        series_tags = raw.get("series_tags", [])
+        if isinstance(series_tags, str):
+            series_tags = [t.strip() for t in series_tags.split(",") if t.strip()]
+
+        char_name = ident_tags[0] if ident_tags else ""
+        series_name = series_tags[0] if series_tags else (ident_tags[1] if len(ident_tags) > 1 and "series" in ident_tags[1] else "")
+        extra_tags = [t for t in ident_tags if t != char_name and t != series_name]
+
+        result["identity"] = {
+            "character": char_name,
+            "series": series_name,
+        }
+        if extra_tags:
+            result["identity"]["extra"] = extra_tags
+
+    # 2. dna (hair, face, body)
+    dna = raw.get("dna")
+    if isinstance(dna, dict):
+        result["dna"] = dict(dna)
+    else:
+        face_tags = raw.get("face_tags", [])
+        if isinstance(face_tags, str):
+            face_tags = [t.strip() for t in face_tags.split(",") if t.strip()]
+
+        breasts_tags = raw.get("breasts_tags", [])
+        if isinstance(breasts_tags, str):
+            breasts_tags = [t.strip() for t in breasts_tags.split(",") if t.strip()]
+
+        skin_tags = raw.get("skin_tags", [])
+        if isinstance(skin_tags, str):
+            skin_tags = [t.strip() for t in skin_tags.split(",") if t.strip()]
+
+        other_body_tags = raw.get("body_other_tags", [])
+        if isinstance(other_body_tags, str):
+            other_body_tags = [t.strip() for t in other_body_tags.split(",") if t.strip()]
+
+        hair_color = ""
+        hair_style = ""
+        eyes_color = ""
+        face_marks = []
+        for t in face_tags:
+            low = t.lower()
+            if "eyes" in low or "eye" in low:
+                eyes_color = t
+            elif any(c in low for c in ("hair", "twintails", "ponytail", "braid", "bob", "bangs", "ahoge")):
+                if any(col in low for col in ("brown", "black", "blonde", "blue", "red", "white", "silver", "pink", "green", "purple")):
+                    hair_color = t
+                else:
+                    hair_style = t
+            else:
+                face_marks.append(t)
+
+        result["dna"] = {
+            "hair": {
+                "color": hair_color,
+                "style": hair_style,
+            },
+            "face": {
+                "eyes": eyes_color,
+            },
+            "body": {
+                "skin": ", ".join(skin_tags) if skin_tags else "",
+                "breasts": ", ".join(breasts_tags) if breasts_tags else "",
+                "build": ", ".join(other_body_tags) if other_body_tags else "",
+            }
+        }
+        if face_marks:
+            result["dna"]["face"]["marks"] = ", ".join(face_marks)
+
+    # 空の内部キーを整理
+    for block in ("hair", "face", "body"):
+        if block in result.get("dna", {}) and isinstance(result["dna"][block], dict):
+            result["dna"][block] = {k: v for k, v in result["dna"][block].items() if v}
+
+    # 3. costume
+    costume = raw.get("costume")
+    if isinstance(costume, dict):
+        result["costume"] = dict(costume)
+    else:
+        costume_tags = raw.get("costume_tags", [])
+        if isinstance(costume_tags, str):
+            costume_tags = [t.strip() for t in costume_tags.split(",") if t.strip()]
+        result["costume"] = {"default": costume_tags}
+
+    # 4. override_rules
+    rules = raw.get("override_rules", {})
+    result["override_rules"] = {
+        "breasts": rules.get("breasts", "strict"),
+        "skin": rules.get("skin", "strict"),
+        "costume": rules.get("costume", "source"),
+        "art_style": rules.get("art_style", "source"),
+        "artist": rules.get("artist", "none"),
+        "multi_mode": rules.get("multi_mode", "capsule"),
+    }
+
+    # 5. その他オプション
+    for opt_key in ("artist_tags", "negative_tags", "default_checkpoint", "default_backend"):
+        if opt_key in raw and raw[opt_key]:
+            result[opt_key] = raw[opt_key]
+
+    return result
+
+
+def save_heroine(heroine_key: str, heroine_data: dict) -> None:
     """WebUI等からヒロイン設定を保存し、即座にリロードする"""
     _create_backup()
     data = _load_yaml(CONFIG_YAML_PATH)
     if "heroines" not in data:
         data["heroines"] = {}
-    data["heroines"][heroine_key] = heroine_data
+    normalized = normalize_heroine_v3_schema(heroine_data)
+    data["heroines"][heroine_key] = normalized
     _save_yaml(CONFIG_YAML_PATH, data)
     reload_config()
 

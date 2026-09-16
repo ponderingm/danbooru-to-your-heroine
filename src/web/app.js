@@ -1222,6 +1222,12 @@ function updateOptionDefaults(heroineKey, isBatch = false) {
     artistInput.placeholder = "⚙️ 設定通り";
   }
 
+  const multiModeSelect = isBatch ? bMultiMode : fMultiMode;
+  if (multiModeSelect && rules.multi_mode) {
+    multiModeSelect.value = rules.multi_mode;
+    multiModeSelect.title = `ヒロイン基本設定: ${rules.multi_mode}`;
+  }
+
   const bSelect = isBatch ? batchBackendSelect : backendSelect;
   if (bSelect && h.default_backend) {
     let targetBackend = h.default_backend;
@@ -2435,6 +2441,7 @@ const hmRuleSkin = document.getElementById("hm-rule-skin");
 const hmRuleCostume = document.getElementById("hm-rule-costume");
 const hmRuleArtStyle = document.getElementById("hm-rule-art-style");
 const hmRuleArtist = document.getElementById("hm-rule-artist");
+const hmRuleMultiMode = document.getElementById("hm-rule-multi-mode");
 const hmSeries = document.getElementById("hm-series");
 const hmArtist = document.getElementById("hm-artist");
 const hmNegative = document.getElementById("hm-negative");
@@ -2555,31 +2562,49 @@ function populateHeroineForm(key) {
   hmIdentity.value = (h.identity_tags || []).join(", ");
   hmFace.value = (h.face_tags || []).join(", ");
 
-  // body_tags を胸サイズ、肌色、その他体格に自動分類して各欄にセット
-  const allBodyTags = h.body_tags || [];
-  let breastsTags = h.breasts_tags;
-  let skinTags = h.skin_tags;
-  let otherBodyTags = h.body_other_tags;
+  // v3 スキーマ対応: dna / identity からの展開
+  if (h.dna) {
+    const hairTags = [h.dna.hair?.color, h.dna.hair?.style, h.dna.hair?.feature].filter(Boolean);
+    const faceTags = [h.dna.face?.eyes, h.dna.face?.marks].filter(Boolean);
+    hmFace.value = [...hairTags, ...faceTags].join(", ");
 
-  if (!breastsTags || !skinTags || !otherBodyTags) {
-    breastsTags = [];
-    skinTags = [];
-    otherBodyTags = [];
-    allBodyTags.forEach(tag => {
-      if (isBreastTag(tag)) {
-        breastsTags.push(tag);
-      } else if (isSkinTag(tag)) {
-        skinTags.push(tag);
-      } else {
-        otherBodyTags.push(tag);
-      }
-    });
+    if (hmTagBreasts) hmTagBreasts.value = h.dna.body?.breasts || "";
+    if (hmTagSkin) hmTagSkin.value = h.dna.body?.skin || "";
+    if (hmBodyOther) hmBodyOther.value = [h.dna.body?.build, h.dna.body?.marks].filter(Boolean).join(", ");
+  } else {
+    // 従来のフォールバック
+    const allBodyTags = h.body_tags || [];
+    let breastsTags = h.breasts_tags;
+    let skinTags = h.skin_tags;
+    let otherBodyTags = h.body_other_tags;
+
+    if (!breastsTags || !skinTags || !otherBodyTags) {
+      breastsTags = [];
+      skinTags = [];
+      otherBodyTags = [];
+      allBodyTags.forEach(tag => {
+        if (isBreastTag(tag)) {
+          breastsTags.push(tag);
+        } else if (isSkinTag(tag)) {
+          skinTags.push(tag);
+        } else {
+          otherBodyTags.push(tag);
+        }
+      });
+    }
+
+    if (hmTagBreasts) hmTagBreasts.value = breastsTags.join(", ");
+    if (hmTagSkin) hmTagSkin.value = skinTags.join(", ");
+    if (hmBodyOther) hmBodyOther.value = otherBodyTags.join(", ");
   }
 
-  if (hmTagBreasts) hmTagBreasts.value = breastsTags.join(", ");
-  if (hmTagSkin) hmTagSkin.value = skinTags.join(", ");
-  if (hmBodyOther) hmBodyOther.value = otherBodyTags.join(", ");
-  if (hmBody) hmBody.value = allBodyTags.join(", ");
+  if (h.identity) {
+    const idParts = [h.identity.character, h.identity.series, ...(h.identity.extra || [])].filter(Boolean);
+    hmIdentity.value = idParts.join(", ");
+    if (hmSeries && h.identity.series) hmSeries.value = h.identity.series;
+  }
+
+  if (hmBody) hmBody.value = (h.body_tags || []).join(", ");
   hmCostume.value = (h.costume_tags || []).join(", ");
 
   const rules = h.override_rules || {};
@@ -2588,6 +2613,7 @@ function populateHeroineForm(key) {
   if (hmRuleCostume) hmRuleCostume.value = rules.costume || "source";
   if (hmRuleArtStyle) hmRuleArtStyle.value = rules.art_style || "source";
   if (hmRuleArtist) hmRuleArtist.value = rules.artist || "none";
+  if (hmRuleMultiMode) hmRuleMultiMode.value = rules.multi_mode || "capsule";
 
   hmSeries.value = (h.series_tags || []).join(", ");
   hmArtist.value = (h.artist_tags || []).join(", ");
@@ -2618,6 +2644,7 @@ function resetHeroineFormNew() {
   if (hmRuleCostume) hmRuleCostume.value = "source";
   if (hmRuleArtStyle) hmRuleArtStyle.value = "source";
   if (hmRuleArtist) hmRuleArtist.value = "none";
+  if (hmRuleMultiMode) hmRuleMultiMode.value = "capsule";
   hmSeries.value = "";
   hmArtist.value = "";
   hmNegative.value = "";
@@ -2879,6 +2906,7 @@ if (heroineForm) {
           costume: hmRuleCostume ? hmRuleCostume.value : "source",
           art_style: hmRuleArtStyle ? hmRuleArtStyle.value : "source",
           artist: hmRuleArtist ? hmRuleArtist.value : "none",
+          multi_mode: hmRuleMultiMode ? hmRuleMultiMode.value : "capsule",
         },
         series_tags: splitTags(hmSeries.value),
         artist_tags: splitTags(hmArtist.value),

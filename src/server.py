@@ -71,6 +71,7 @@ from danbooru_to_heroine import (
 )
 
 from model_adapter import adapt_prompt, get_negative_prompt, RATING_TAG_ALIASES
+from tag_classifier import classifier
 from comfy_client import (
     COMFYUI_URL, CUSTOM_COMFY_URL, ANIMA_COMFY_URL,
     compute_canvas_size, build_workflow_for_backend, resolve_backend, list_backends,
@@ -229,6 +230,7 @@ def _convert(req: ConvertRequest):
         selected_prompt = booru_prompt
 
     detected_model = (post.generation_meta or {}).get("detected_model", "") if isinstance(post, UnifiedPost) else ""
+    slots_map = classifier.classify_tags(identity_tags + situation_tags, fallback_llm=False)
 
     extras = {
         "booru_prompt": booru_prompt,
@@ -236,7 +238,11 @@ def _convert(req: ConvertRequest):
         "hybrid_prompt": hybrid_prompt,
         "has_raw_prompt": bool(raw_prompt),
         "detected_model": detected_model,
+        "identity_tags": identity_tags,
+        "situation_tags": situation_tags,
         "removed_tags": _removed,
+        "slots": slots_map,
+        "multi_mode": multi_mode,
         "extra_negative_tags": extra_neg,
     }
     return post, heroine, selected_prompt, model, extras
@@ -481,6 +487,10 @@ def _do_generate(req: GenerateRequest) -> dict:
         "override_costume": req.override_costume,
         "override_art_style": req.override_art_style,
         "multi_mode": getattr(req, "multi_mode", "capsule"),
+        "identity_tags": extras.get("identity_tags", []),
+        "situation_tags": extras.get("situation_tags", []),
+        "removed_tags": extras.get("removed_tags", []),
+        "slots": extras.get("slots", {}),
         "files": saved_files,
         "image_urls": [f"/output/{fn}" for fn in saved_files],
         "created_at": datetime.now(timezone.utc).isoformat(),

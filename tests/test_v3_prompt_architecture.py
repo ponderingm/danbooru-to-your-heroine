@@ -181,4 +181,79 @@ def test_multi_mode_strategies():
     assert "one-piece tan" not in capsule_b
 
 
+def test_normalize_heroine_v3_schema():
+    """v2形式のフラットデータがv3の7大スロット階層スキーマへ自動正規化されるか"""
+    from config import normalize_heroine_v3_schema
+
+    legacy_data = {
+        "name": "テストヒロイン",
+        "identity_tags": ["heroine_chan", "sample_series \\(series\\)"],
+        "face_tags": ["blonde hair", "twintails", "blue eyes"],
+        "breasts_tags": ["small breasts"],
+        "skin_tags": ["pale skin"],
+        "body_other_tags": ["slender"],
+        "costume_tags": ["sailor uniform", "pleated skirt"],
+        "override_rules": {
+            "breasts": "strict",
+            "skin": "strict",
+            "costume": "source",
+            "multi_mode": "shared_costume"
+        }
+    }
+
+    norm = normalize_heroine_v3_schema(legacy_data)
+    assert norm["name"] == "テストヒロイン"
+    assert norm["identity"]["character"] == "heroine_chan"
+    assert norm["identity"]["series"] == "sample_series \\(series\\)"
+    assert norm["dna"]["hair"]["color"] == "blonde hair"
+    assert norm["dna"]["hair"]["style"] == "twintails"
+    assert norm["dna"]["face"]["eyes"] == "blue eyes"
+    assert norm["dna"]["body"]["skin"] == "pale skin"
+    assert norm["dna"]["body"]["breasts"] == "small breasts"
+    assert norm["dna"]["body"]["build"] == "slender"
+    assert norm["override_rules"]["multi_mode"] == "shared_costume"
+    assert "default" in norm["costume"]
+
+
+def test_manifest_structured_fields(monkeypatch):
+    """/convert 時に identity_tags, situation_tags, removed_tags, slots が正しく返却されるか"""
+    import server
+    from server import _convert, ConvertRequest
+    from site_adapters.base import UnifiedPost
+
+    fake_post = UnifiedPost(
+        post_id="999999",
+        source_site="danbooru",
+        url="https://danbooru.donmai.us/posts/999999",
+        general_tags=["blonde_hair", "blue_eyes", "smile", "bedroom", "bikini"],
+        character_tags=[],
+        artist_tags=[],
+        copyright_tags=[],
+        meta_tags=["highres"],
+        all_tags=["blonde_hair", "blue_eyes", "smile", "bedroom", "bikini", "highres"]
+    )
+
+    # fetch_post をモックして fake_post を返却
+    monkeypatch.setattr(server, "fetch_post", lambda url, **kwargs: fake_post)
+
+    req = ConvertRequest(
+        url="https://danbooru.donmai.us/posts/999999",
+        heroine="yukikaze",
+        multi_mode="capsule"
+    )
+
+    post, heroine, prompt, model, extras = _convert(req)
+    assert "identity_tags" in extras
+    assert "situation_tags" in extras
+    assert "removed_tags" in extras
+    assert "slots" in extras
+    assert "multi_mode" in extras
+
+    # スロット辞書に bedroom や smile が分類されていること
+    assert any("environment" in s for s in extras["slots"].values())
+    # 除去タグに元絵の blonde hair や blue eyes が含まれていること
+    assert "blonde hair" in extras["removed_tags"]
+
+
+
 
