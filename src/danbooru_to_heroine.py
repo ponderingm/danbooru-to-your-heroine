@@ -41,6 +41,16 @@ BREAST_TAGS = getattr(config, "BREAST_TAGS", set())
 SKIN_TAGS = getattr(config, "SKIN_TAGS", set())
 CENSORING_BLACKLIST = getattr(config, "CENSORING_BLACKLIST", set())
 
+# ヒロインDNA置換時にも絶対に誤消去してはならない一般身体部位・露出・メイク・装飾タグ
+GENERAL_BODY_PRESERVE_TAGS = {
+    "thighs", "armpits", "collarbone", "bare shoulders", "bare arms", "bare legs",
+    "cleavage", "sideboob", "underboob", "navel", "fingernails", "long fingernails",
+    "nail polish", "pink nails", "black nails", "red nails",
+    "makeup", "lipstick", "pink lips", "red lips", "eyeshadow", "body blush",
+    "stomach", "midriff", "legs", "feet", "toes", "back", "butt", "ass",
+    "groin", "pubic hair", "crotch",
+}
+
 # Danbooruのratingフィールド(g/s/q/e) → Illustrious系モデルが学習済みのratingタグ
 RATING_TAG_MAP = {
     "g": "rating:general",
@@ -454,13 +464,23 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
         # 元絵タグのスロットがヒロインDNAのスロットと競合する場合、自動的に元絵属性を除去・置換する
         slot = tag_slots.get(tag_norm)
         if slot and slot.startswith("character_dna."):
-            # 男性側属性（short black hair, penis等）は誤消去しないよう保護
-            if not any(kw in tag_norm for kw in ("boy", "male", "man", "penis", "beard")):
-                # ヒロインが同系統のスロットを定義している場合（例: hair.color, face.eyes）
-                slot_prefix = ".".join(slot.split(".")[:3])  # 例: character_dna.hair.color
-                if any(k.startswith(slot_prefix) for k in heroine_slots):
-                    removed_tags.append(tag_norm)
-                    continue
+            # 一般身体部位・露出・メイク・装飾タグは保護（DNA置換の巻き添えにしない）
+            if tag_norm not in GENERAL_BODY_PRESERVE_TAGS:
+                # 男性側属性（short black hair, penis等）は誤消去しないよう保護
+                if not any(kw in tag_norm for kw in ("boy", "male", "man", "penis", "beard")):
+                    # 直接競合するDNAスロット（髪、胸、肌色、瞳色）のみ置換対象
+                    slot_prefix = ".".join(slot.split(".")[:3])  # 例: character_dna.hair.color
+                    if slot_prefix in (
+                        "character_dna.hair.color",
+                        "character_dna.hair.style",
+                        "character_dna.hair.feature",
+                        "character_dna.body.breasts",
+                        "character_dna.body.skin",
+                        "character_dna.face.eyes",
+                    ):
+                        if any(k.startswith(slot_prefix) for k in heroine_slots):
+                            removed_tags.append(tag_norm)
+                            continue
 
         situation_tags.append(tag.replace("_", " "))
 

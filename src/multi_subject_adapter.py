@@ -25,6 +25,16 @@ MALE_ATTR_KEYWORDS: Set[str] = {
     "erection", "ejaculation", "condom", "male focus"
 }
 
+# ヒロインDNA置換時にも絶対に誤消去してはならない一般身体部位・露出・メイク・装飾タグ
+GENERAL_BODY_PRESERVE_TAGS: Set[str] = {
+    "thighs", "armpits", "collarbone", "bare shoulders", "bare arms", "bare legs",
+    "cleavage", "sideboob", "underboob", "navel", "fingernails", "long fingernails",
+    "nail polish", "pink nails", "black nails", "red nails",
+    "makeup", "lipstick", "pink lips", "red lips", "eyeshadow", "body blush",
+    "stomach", "midriff", "legs", "feet", "toes", "back", "butt", "ass",
+    "groin", "pubic hair", "crotch",
+}
+
 
 def is_multi_subject(tags: List[str]) -> bool:
     """プロンプトまたはタグリストに複数人（特に1girl + 1boyなど）が含まれるかを判定する"""
@@ -90,6 +100,10 @@ def separate_multi_subject_tags(
 
         # 身体・顔・髪
         if parent == "character_dna":
+            # 一般身体部位・露出・メイク・装飾タグはアクション・身体スロットとして保持
+            if low_t in GENERAL_BODY_PRESERVE_TAGS:
+                common_action_slots.append(t)
+                continue
             # 元絵の女性身体属性（ヒロインDNAと競合するもの）は置換されるためスキップ
             continue
 
