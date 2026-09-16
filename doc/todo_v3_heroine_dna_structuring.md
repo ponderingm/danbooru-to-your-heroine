@@ -18,40 +18,54 @@
 
 ---
 
-## 2. 💡 構造化モデル（構想）
+## 2. 💡 構造化モデル：7大スロット ＆ サブプロパティ体系 (Dot Notation)
 
-LLMによって、ヒロインおよび投稿タグを以下のような構造化JSON/スキーマへ自動分類・展開する：
+各タグは **`親スロット.サブカテゴリ`** のドット記法で一意にスロット付けされ、細やかな部分置換やモデル向け整列を可能にする。
 
-```json
-{
-  "heroine_id": "example_heroine",
-  "identity": {
-    "hair": {
-      "color": "brown",
-      "style": "short_hair",
-      "bangs": "bangs",
-      "accessories": ["flower_hair_ornament", "single_white_flower"]
-    },
-    "face": {
-      "eyes": ["brown_eyes", "gentle_eyes"],
-      "expression_defaults": ["smile", "calm"]
-    },
-    "body": {
-      "skin": ["dark_skin", "sun-kissed_tan"],
-      "breasts": "small_breasts",
-      "build": ["slender", "wide_hips", "athletic_thighs"]
-    },
-    "signature_costumes": {
-      "night_dress": {
-        "outer": ["black_halterneck", "backless_dress"],
-        "accents": ["crimson_sash", "gold_glitter"],
-        "accessories": ["white_lace_shawl", "gold_bracelet", "gold_anklet"],
-        "gloves": ["black_see-through_long_gloves"],
-        "footwear": ["black_high_heels"]
-      }
-    }
-  }
-}
+### 2.1 スロット ＆ サブプロパティ一覧
+
+| 親スロット | サブプロパティ (Path) | 具体例タグ | 換装・整列時の制御用途 |
+|---|---|---|---|
+| **1. `meta_quality`** | `.quality`<br>`.artist`<br>`.format` | `masterpiece`, `score_9`<br>`@aoi nagisa (metalder)`<br>`absurdres`, `highres` | プロンプト最前列固定、絵師プリセット制御 |
+| **2. `subject`** | `.count`<br>`.gender` | `1girl`, `solo`, `2girls`<br>`female`, `tomboy` | 構図の基本主体を確定 |
+| **3. `character_dna`** | `.hair.color`<br>`.hair.style`<br>`.hair.feature`<br>`.face.eyes`<br>`.face.marks`<br>`.body.skin`<br>`.body.breasts`<br>`.body.build`<br>`.body.marks` | `brown_hair`, `blonde_hair`<br>`short_hair`, `twintails`<br>`bangs`, `ahoge`<br>`brown_eyes`, `gentle_eyes`<br>`mole_under_eye`, `freckles`<br>`dark_skin`, `pale_skin`<br>`small_breasts`, `large_breasts`<br>`slender`, `wide_hips`<br>`tanlines`, `navel` | **ヒロイン不変DNAスロット**<br>元絵の同一サブ属性を完全パージし、ヒロインの固有特徴を差し替え。<br>「髪型だけ元絵に寄せる（コスプレモード）」などの部分オーバーライドも可能。 |
+| **4. `costume`** | `.outer`<br>`.top`<br>`.bottom`<br>`.full_body`<br>`.inner`<br>`.legwear`<br>`.footwear` | `jacket`, `cloak`<br>`halterneck`, `blouse`<br>`pleated_skirt`, `shorts`<br>`dress`, `night_dress`, `maid_uniform`<br>`micro_bikini`, `bra`, `panties`<br>`thighhighs`, `stockings`<br>`high_heels`, `boots`, `barefoot` | **衣装レイヤードスロット**<br>「上着は脱がせてインナーだけ残す」「靴だけヒロイン指定のピンヒールにする」「衣装アドオン（722着）を丸ごと着せる」等の高度な衣装制御。 |
+| **5. `accessories`** | `.head`<br>`.eyes`<br>`.neck`<br>`.arms`<br>`.body`<br>`.jewelry`<br>`.item` | `flower_hair_ornament`, `ribbon`<br>`glasses`, `eyepatch`<br>`white_lace_shawl`, `choker`<br>`black_see-through_long_gloves`<br>`gold_garter_ring`, `sash`<br>`gold_bracelet`, `labia_ring`<br>`cocktail_glass`, `sword` | **装飾・小物スロット**<br>元絵の神絵師特有の共起装飾を継承しつつ、ヒロインの象徴装飾（左側頭部の一輪花や金ブレスレット等）と衝突なく重ね着。 |
+| **6. `action_pose`** | `.expression`<br>`.pose`<br>`.gaze`<br>`.framing`<br>`.interaction` | `smile`, `blush`, `open_mouth`<br>`sitting`, `lying`, `standing`<br>`looking_at_viewer`<br>`upper_body`, `cowboy_shot`, `pov`<br>`holding_glass`, `eating` | **構図・シチュエーションスロット**<br>元絵の魅力的なポーズ・表情・フェチ構図を100%継承。 |
+| **7. `environment`** | `.location`<br>`.time_weather`<br>`.lighting`<br>`.effects`<br>`.background` | `bar`, `beach`, `bedroom`<br>`night`, `sunset`, `rain`<br>`sunlight`, `shadow`, `glowing`<br>`depth_of_field`, `sparkles`<br>`simple_background`, `white_background` | **環境・空気感スロット**<br>末尾に配置してシーンの背景ノイズやライティングを確定。 |
+
+---
+
+### 2.2 ヒロイン定義スキーマ例 (v3.0)
+
+```yaml
+heroine_id: yukikaze_future
+identity:
+  dna:
+    hair:
+      color: "brown hair"
+      style: "short hair"
+      feature: "bangs"
+    face:
+      eyes: "brown eyes, gentle eyes"
+    body:
+      skin: "dark skin, sun-kissed tan"
+      breasts: "small breasts, B77"
+      build: "slender, wide hips, H86"
+      marks: "navel"
+  signature_costumes:
+    night_dress:
+      costume:
+        full_body: "black halterneck dress, backless dress, high leg, deep slit"
+        inner: "black see-through lingerie"
+        legwear: "bare legs"
+        footwear: "black high heels, stiletto heels"
+      accessories:
+        head: "single white flower, hair flower"
+        neck: "white lace shawl"
+        arms: "black see-through long gloves, gold bracelet"
+        body: "crimson sash, gold glitter"
+        jewelry: "gold garter ring, gold anklet"
 ```
 
 ---
