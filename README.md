@@ -459,6 +459,7 @@ docker compose up --build -d
 - ✅ **完了**: 自然言語変換・共起ファインダーのコアモジュール実装（`cooccurrence_finder.py` / `natural_to_danbooru.py`）
 - 📌 **次期メジャーアップデート（v3.0）の予定テーマ**:
   - **🧠 LLM連携 ＆ 共起の輪のフロントエンド本格統合**: 自然言語からのシチュエーション一発生成、WebUI上での共起タグレコメンドUI連携。
+  - **🧬 ヒロインDNA管理の構造化（LLMタグ分類）**: カンマ区切りのタグ羅列から部位別（髪・顔・身体・衣装・装飾）スロット構造へのLLMセマンティック分解と精緻な換装パイプライン。
   - **🧩 汎用アドオン・フレームワーク（Generic Addon Framework）**: 衣装・MGE種族・シチュエーション等の外部データベースをプラグインパックとして統一管理（[`docs/costume_addon_design_spec.md`](docs/costume_addon_design_spec.md) 参照）。
   - **📦 ComfyUI カスタムノード化 (`ComfyUI-Danbooru-To-Heroine`)**: 外部サーバーを起動せず、ComfyUIワークフロー内でURL/IDから直接ノード上でヒロイン置換を行う単体パッケージ化。
   - **⚡ 高度な耐障害性・分散実行**: 生成失敗時の自動リトライ・再接続機構、複数GPU/インスタンスへの並列ディスパッチ。
