@@ -134,3 +134,51 @@ def test_female_only_multi_subject():
     assert "1girl (Yukikaze)" in anima_prompt
 
 
+def test_multi_mode_strategies():
+    """複数人構図戦略の全モード (capsule / flat / shared_costume) の挙動検証"""
+    identity_tags = ["1girl", "dark skin", "small breasts", "one-piece tan"]
+    situation_tags = ["masterpiece", "2girls", "yuri", "school uniform", "pleated skirt", "bedroom"]
+
+    # 1. Mode C (capsule / デフォルト)
+    c_ill = build_prompt(identity_tags, situation_tags, model_type="illustrious", multi_mode="capsule")
+    assert "BREAK" in c_ill
+    # チャンク2のヒロインDNAカプセルには衣装タグが入っていないこと
+    chunks_c = c_ill.split("BREAK")
+    assert "school uniform" not in chunks_c[1]
+
+    c_anima = build_prompt(identity_tags, situation_tags, model_type="anima", heroine_name="Yukikaze", multi_mode="capsule")
+    assert "1girl (Yukikaze) with (" in c_anima
+    # カプセル内に school uniform は入っていないこと
+    capsule_part = c_anima.split("with (")[1].split(")")[0]
+    assert "school uniform" not in capsule_part
+
+    # 2. Mode A (flat / v2風フラット配置)
+    a_ill = build_prompt(identity_tags, situation_tags, model_type="illustrious", multi_mode="flat")
+    assert "BREAK" not in a_ill
+    assert "2girls" in a_ill
+    assert "dark-skinned female" in a_ill
+    assert "school uniform" in a_ill
+
+    a_anima = build_prompt(identity_tags, situation_tags, model_type="anima", heroine_name="Yukikaze", multi_mode="flat")
+    assert "with (" not in a_anima
+    assert "2girls" in a_anima
+    assert "dark skin" in a_anima
+    assert "school uniform" in a_anima
+
+    # 3. Mode B (shared_costume / 衣装共有注入)
+    b_ill = build_prompt(identity_tags, situation_tags, model_type="illustrious", multi_mode="shared_costume")
+    assert "BREAK" in b_ill
+    chunks_b = b_ill.split("BREAK")
+    # ヒロインチャンクに school uniform が注入されていること
+    assert "school uniform" in chunks_b[1]
+    # 着衣により露出バイアスの強い one-piece tan が抑制されていること
+    assert "one-piece tan" not in chunks_b[1]
+
+    b_anima = build_prompt(identity_tags, situation_tags, model_type="anima", heroine_name="Yukikaze", multi_mode="shared_costume")
+    assert "1girl (Yukikaze) with (" in b_anima
+    capsule_b = b_anima.split("with (")[1].split(")")[0]
+    assert "school uniform" in capsule_b
+    assert "one-piece tan" not in capsule_b
+
+
+

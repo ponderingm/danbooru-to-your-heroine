@@ -25,6 +25,17 @@ MALE_ATTR_KEYWORDS: Set[str] = {
     "erection", "ejaculation", "condom", "male focus"
 }
 
+# 複数人構図プロンプト戦略モード
+MULTI_MODE_CAPSULE = "capsule"          # C: カプセル完全隔離 (BREAK / 1girl with (...))
+MULTI_MODE_FLAT = "flat"                # A: フラット配置・自然分散 (v2ライク)
+MULTI_MODE_SHARED_COSTUME = "shared_costume"  # B: 衣装タグ共有注入 (ヒロインにも服を着せる)
+VALID_MULTI_MODES: Set[str] = {MULTI_MODE_CAPSULE, MULTI_MODE_FLAT, MULTI_MODE_SHARED_COSTUME}
+
+# 着衣時にヒロインDNAから抑制する露出・日焼け系タグ
+CLOTHED_SUPPRESS_DNA_TAGS: Set[str] = {
+    "one-piece tan", "bikini tan", "tanlines", "tan lines"
+}
+
 
 def is_multi_subject(tags: List[str]) -> bool:
     """プロンプトまたはタグリストに複数人（特に1girl + 1boyなど）が含まれるかを判定する"""
@@ -42,7 +53,7 @@ def separate_multi_subject_tags(
     heroine_dna_tags: List[str],
 ) -> Dict[str, Any]:
     """
-    複数人構図において、タグを「ヒロイン属性」「パートナー属性」「共通アクション・構図」「環境」へ分離する
+    複数人構図において、タグを「ヒロイン属性」「パートナー属性」「共通アクション・構図」「衣装」「環境」へ分離する
     """
     clean_raw = [t.replace("_", " ").strip() for t in raw_tags if t.strip()]
     clean_dna = [t.replace("_", " ").strip() for t in heroine_dna_tags if t.strip()]
@@ -53,6 +64,7 @@ def separate_multi_subject_tags(
     female_dna_slots: Dict[str, str] = {}
     male_slots: List[str] = []
     common_meta_slots: List[str] = []
+    costume_slots: List[str] = []
     common_action_slots: List[str] = []
     common_env_slots: List[str] = []
     unknown_slots: List[str] = []
@@ -90,10 +102,14 @@ def separate_multi_subject_tags(
                 common_meta_slots.append(t)
             continue
 
-        # 身体・顔・髪・衣装・装飾・アクション・ポーズ・構図
-        # ※ mutate_tags_to_heroine 後のタグなので、残っている身体描写（太もも、鎖骨等）や
-        # 衣装・小道具はすべて共通アクション・身体スロットとして自然に保持する
-        if parent in ("character_dna", "costume", "accessories", "action_pose"):
+        # 衣装・装飾
+        if parent in ("costume", "accessories"):
+            costume_slots.append(t)
+            common_action_slots.append(t)
+            continue
+
+        # 身体・顔・髪・アクション・ポーズ・構図
+        if parent in ("character_dna", "action_pose"):
             common_action_slots.append(t)
             continue
 
@@ -108,16 +124,22 @@ def separate_multi_subject_tags(
         "meta_tags": sorter.sort_tags(common_meta_slots),
         "female_dna_tags": list(female_dna_slots.values()),
         "male_tags": sorter.sort_tags(male_slots),
+        "costume_tags": sorter.sort_tags(costume_slots),
         "action_costume_tags": sorter.sort_tags(common_action_slots),
         "env_tags": sorter.sort_tags(common_env_slots),
         "unknown_tags": sorter.sort_tags(unknown_slots),
     }
 
 
-def build_illustrious_multi_prompt(separated: Dict[str, Any]) -> str:
+def build_illustrious_multi_prompt(
+    separated: Dict[str, Any],
+    mode: str = MULTI_MODE_CAPSULE,
+) -> str:
     """
-    Illustrious / SDXL向け:
-    CLIPの77トークン物理チャンク境界（BREAK）を用いた主語完全隔離プロンプト
+    Illustrious / SDXL向け複数人プロンプト構築:
+    - "capsule" (C: デフォルト): BREAKによるチャンク物理隔離
+    - "flat" (A: v2風): BREAKを使わずセマンティック黄金順でフラット配置
+    - "shared_costume" (B: 衣装共有): ヒロイン側チャンクにも衣装タグを共有注入し、日焼け跡等の露出タグを抑制
     """
     # 役割バインド自動昇格（例: dark skin ➜ dark-skinned female）
     promoted_female_dna = []
@@ -137,6 +159,30 @@ def build_illustrious_multi_prompt(separated: Dict[str, Any]) -> str:
         for t in separated["meta_tags"]
     )
 
+    # 1. Mode A: flat (v2風フラット配置)
+    if mode == MULTI_MODE_FLAT:
+        flat_tags = (
+            separated["meta_tags"]
+            + [t for t in promoted_female_dna if t.lower() != "1girl"]
+            + (["1girl"] if "1girl" not in separated["meta_tags"] else [])
+            + separated["action_costume_tags"]
+            + separated["env_tags"]
+            + separated["unknown_tags"]
+        )
+        if has_male:
+            flat_tags += [t for t in separated["male_tags"] if t.lower() != "1boy"] + (["1boy"] if "1boy" not in separated["meta_tags"] else [])
+        sorted_flat = sorter.sort_tags(flat_tags, model="illustrious")
+        return ", ".join(sorted_flat)
+
+    # 2. Mode B: shared_costume (衣装共有)
+    if mode == MULTI_MODE_SHARED_COSTUME:
+        costume_tags = separated.get("costume_tags", [])
+        filtered_dna = [t for t in promoted_female_dna if t.lower() not in CLOTHED_SUPPRESS_DNA_TAGS] if costume_tags else promoted_female_dna
+        chunk2_tags = [t for t in sorter.sort_tags(filtered_dna + costume_tags) if t.lower() != "1girl"]
+    else:
+        # Mode C: capsule (通常カプセル完全隔離)
+        chunk2_tags = [t for t in sorter.sort_tags(promoted_female_dna) if t.lower() != "1girl"]
+
     # チャンク1: 品質・メタ ＋ アクション・構図・環境
     gender_meta = ["1girl", "1boy", "hetero"] if has_male else []
     chunk1_tags = sorter.sort_tags(
@@ -148,8 +194,6 @@ def build_illustrious_multi_prompt(separated: Dict[str, Any]) -> str:
     )
     chunk1_str = ", ".join(chunk1_tags)
 
-    # チャンク2: ヒロインDNA完全隔離
-    chunk2_tags = [t for t in sorter.sort_tags(promoted_female_dna) if t.lower() != "1girl"]
     chunk2_str = ", ".join(["1girl"] + chunk2_tags)
 
     # チャンク3: パートナー（男性側）完全隔離（男性が存在する場合のみ）
@@ -167,26 +211,58 @@ def build_illustrious_multi_prompt(separated: Dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
-def build_anima_multi_prompt(separated: Dict[str, Any], heroine_name: str = "") -> str:
+def build_anima_multi_prompt(
+    separated: Dict[str, Any],
+    heroine_name: str = "",
+    mode: str = MULTI_MODE_CAPSULE,
+) -> str:
     """
-    Anima (Qwen LLM) 向け:
-    自然言語構文による前置詞カプセル化（1girl with (...) and 1boy with (...)）
+    Anima (Qwen LLM) 向け複数人プロンプト構築:
+    - "capsule" (C: デフォルト): 自然言語構文による前置詞カプセル化 (1girl (heroine) with (...))
+    - "flat" (A: v2風): カプセル化を行わずセマンティック黄金順でフラット配置
+    - "shared_costume" (B: 衣装共有): ヒロインカプセル内にも衣装タグを共有注入し、日焼け跡等の露出タグを抑制
     """
+    has_male = bool(separated["male_tags"]) or any(
+        any(k in t.lower() for k in ("1boy", "2boys", "multiple boys", "hetero", "yaoi"))
+        for t in separated["meta_tags"]
+    )
+
+    name_clause = f" ({heroine_name})" if heroine_name else ""
+
+    # 1. Mode A: flat (v2風フラット配置)
+    if mode == MULTI_MODE_FLAT:
+        flat_tags = (
+            separated["meta_tags"]
+            + (["1girl" + name_clause] if "1girl" not in separated["meta_tags"] else [])
+            + [t for t in separated["female_dna_tags"] if t.lower() != "1girl"]
+            + separated["action_costume_tags"]
+            + separated["env_tags"]
+            + separated["unknown_tags"]
+        )
+        if has_male:
+            flat_tags += [t for t in separated["male_tags"] if t.lower() != "1boy"] + (["1boy"] if "1boy" not in separated["meta_tags"] else [])
+        sorted_flat = sorter.sort_tags(flat_tags, model="anima")
+        return ", ".join(sorted_flat)
+
+    # 2. Mode B: shared_costume (衣装共有)
+    if mode == MULTI_MODE_SHARED_COSTUME:
+        costume_tags = separated.get("costume_tags", [])
+        filtered_dna = [
+            t for t in separated["female_dna_tags"]
+            if t.lower() not in CLOTHED_SUPPRESS_DNA_TAGS and t.lower() != "1girl"
+        ] if costume_tags else [t for t in separated["female_dna_tags"] if t.lower() != "1girl"]
+        female_dna_clean = sorter.sort_tags(filtered_dna + costume_tags, model="anima")
+    else:
+        # Mode C: capsule (通常カプセル完全隔離)
+        female_dna_clean = [t for t in sorter.sort_tags(separated["female_dna_tags"], model="anima") if t.lower() != "1girl"]
+
     meta_str = ", ".join(sorter.sort_tags(separated["meta_tags"]))
     action_str = ", ".join(sorter.sort_tags(separated["action_costume_tags"]))
     env_str = ", ".join(sorter.sort_tags(separated["env_tags"]))
     unknown_str = ", ".join(sorter.sort_tags(separated["unknown_tags"]))
 
-    female_dna_clean = [t for t in sorter.sort_tags(separated["female_dna_tags"]) if t.lower() != "1girl"]
     female_dna_str = ", ".join(female_dna_clean)
-
-    name_clause = f" ({heroine_name})" if heroine_name else ""
     female_clause = f"1girl{name_clause} with ({female_dna_str})" if female_dna_str else f"1girl{name_clause}"
-
-    has_male = bool(separated["male_tags"]) or any(
-        any(k in t.lower() for k in ("1boy", "2boys", "multiple boys", "hetero", "yaoi"))
-        for t in separated["meta_tags"]
-    )
 
     male_clause = ""
     if has_male:

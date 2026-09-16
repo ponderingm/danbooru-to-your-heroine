@@ -29,6 +29,9 @@ from multi_subject_adapter import (
     separate_multi_subject_tags,
     build_illustrious_multi_prompt,
     build_anima_multi_prompt,
+    MULTI_MODE_CAPSULE,
+    MULTI_MODE_FLAT,
+    MULTI_MODE_SHARED_COSTUME,
 )
 
 # ─────────────────────────────────────────────
@@ -535,6 +538,7 @@ def build_prompt(
     quality_prefix: list = None,
     model_type: str = "illustrious",
     heroine_name: str = "",
+    multi_mode: str = MULTI_MODE_CAPSULE,
 ) -> str:
     if quality_prefix is None:
         quality_prefix = ["masterpiece", "best quality", "highly detailed"]
@@ -546,9 +550,9 @@ def build_prompt(
     if is_multi_subject(filtered_situation):
         separated = separate_multi_subject_tags(raw_tags=filtered_situation, heroine_dna_tags=identity_tags)
         if "anima" in model_type.lower():
-            return build_anima_multi_prompt(separated, heroine_name=heroine_name)
+            return build_anima_multi_prompt(separated, heroine_name=heroine_name, mode=multi_mode)
         else:
-            return build_illustrious_multi_prompt(separated)
+            return build_illustrious_multi_prompt(separated, mode=multi_mode)
 
     # 2. ソロ構図: 黄金順ソート（75トークン内に主要ヒロインDNAを集約）
     quality_in_situation = [t for t in filtered_situation if t.lower() in QUALITY_TAGS]

@@ -31,6 +31,7 @@ const fOverrideBreasts = document.getElementById("f-override-breasts");
 const fOverrideSkin = document.getElementById("f-override-skin");
 const fOverrideCostume = document.getElementById("f-override-costume");
 const fOverrideArtStyle = document.getElementById("f-override-art-style");
+const fMultiMode = document.getElementById("f-multi-mode");
 const comfyStatusEl = document.getElementById("comfy-status");
 const gallery = document.getElementById("gallery");
 const galleryCount = document.getElementById("gallery-count");
@@ -65,6 +66,7 @@ const bOverrideBreasts = document.getElementById("b-override-breasts");
 const bOverrideSkin = document.getElementById("b-override-skin");
 const bOverrideCostume = document.getElementById("b-override-costume");
 const bOverrideArtStyle = document.getElementById("b-override-art-style");
+const bMultiMode = document.getElementById("b-multi-mode");
 const batchStatusEl = document.getElementById("batch-status");
 
 function resolveArtistInput(val) {
@@ -1018,6 +1020,9 @@ function loadToGenerateForm(entry, targetMode = "single") {
     if (fOverrideArtStyle) {
       fOverrideArtStyle.value = entry.override_art_style || "default";
     }
+    if (fMultiMode) {
+      fMultiMode.value = entry.multi_mode || "capsule";
+    }
     if (fArtistInput) {
       if (entry.custom_artist) {
         fArtistInput.value = entry.custom_artist;
@@ -1055,6 +1060,9 @@ function loadToGenerateForm(entry, targetMode = "single") {
     }
     if (bOverrideArtStyle) {
       bOverrideArtStyle.value = entry.override_art_style || "default";
+    }
+    if (bMultiMode) {
+      bMultiMode.value = entry.multi_mode || "capsule";
     }
     if (bArtistInput) {
       if (entry.custom_artist) {
@@ -1459,6 +1467,7 @@ previewBtn.addEventListener("click", async () => {
         override_skin: fOverrideSkin ? fOverrideSkin.value : undefined,
         override_costume: fOverrideCostume ? fOverrideCostume.value : undefined,
         override_art_style: fOverrideArtStyle ? fOverrideArtStyle.value : undefined,
+        multi_mode: fMultiMode ? fMultiMode.value : undefined,
       }),
     });
     if (!res.ok) {
@@ -1513,6 +1522,7 @@ form.addEventListener("submit", async (e) => {
     override_skin: fOverrideSkin ? fOverrideSkin.value : undefined,
     override_costume: fOverrideCostume ? fOverrideCostume.value : undefined,
     override_art_style: fOverrideArtStyle ? fOverrideArtStyle.value : undefined,
+    multi_mode: fMultiMode ? fMultiMode.value : undefined,
     prompt_override: promptTextarea.value.trim() || undefined,
   };
   try {
@@ -1687,6 +1697,14 @@ function renderCard(entry) {
       <button type="button" class="secondary tag-toggle-btn">🏷 使用タグを表示 (${tags.length})</button>
       <div class="prompt hidden"></div>
       <div>${created}</div>
+      <div class="card-multi-mode" style="margin: 6px 0; font-size: 0.78rem; display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+        <span title="複数人構図時のプロンプト戦略">👥 複数人:</span>
+        <select class="regen-multi-mode" style="padding: 2px 4px; font-size: 0.78rem; flex: 1; max-width: 170px; background: #181a26; border: 1px solid var(--border); border-radius: 4px; color: var(--text);">
+          <option value="capsule" ${(!entry.multi_mode || entry.multi_mode === "capsule") ? "selected" : ""}>🔒 カプセル (標準)</option>
+          <option value="flat" ${entry.multi_mode === "flat" ? "selected" : ""}>🌐 フラット (v2風)</option>
+          <option value="shared_costume" ${entry.multi_mode === "shared_costume" ? "selected" : ""}>👗 衣装共有 (両方着衣)</option>
+        </select>
+      </div>
       <button type="button" class="secondary prompt-edit-toggle-btn">✏️ プロンプトを編集して再生成</button>
       <textarea class="regen-prompt hidden" rows="3">${escapeHtml(entry.prompt || "")}</textarea>
       <div class="card-actions">
@@ -1743,14 +1761,46 @@ function renderCard(entry) {
 
   const promptEditToggleBtn = card.querySelector(".prompt-edit-toggle-btn");
   const regenPromptEl = card.querySelector(".regen-prompt");
+  const regenMultiModeSelect = card.querySelector(".regen-multi-mode");
+
   promptEditToggleBtn.addEventListener("click", () => {
     regenPromptEl.classList.toggle("hidden");
   });
+
+  // 複数人戦略が変更された際、編集欄が開いていればプレビュープロンプトを自動再取得
+  if (regenMultiModeSelect) {
+    regenMultiModeSelect.addEventListener("change", async () => {
+      if (!regenPromptEl.classList.contains("hidden")) {
+        try {
+          const res = await fetch(`${API_BASE}/convert`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: entry.original_url,
+              heroine: entry.heroine,
+              backend: entry.backend,
+              artist_mode: entry.artist_mode,
+              custom_artist: entry.custom_artist,
+              include_artist: entry.include_artist,
+              multi_mode: regenMultiModeSelect.value,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.prompt) regenPromptEl.value = data.prompt;
+          }
+        } catch (e) {
+          console.warn("Failed to auto-update regen prompt preview:", e);
+        }
+      }
+    });
+  }
 
   const regenBtn = card.querySelector(".regen-btn");
   const regenStatus = card.querySelector(".regen-status");
   regenBtn.addEventListener("click", async () => {
     regenBtn.disabled = true;
+    const selectedMultiMode = regenMultiModeSelect ? regenMultiModeSelect.value : (entry.multi_mode || "capsule");
     const payload = {
       url: entry.original_url,
       heroine: entry.heroine,
@@ -1763,6 +1813,7 @@ function renderCard(entry) {
       checkpoint: entry.checkpoint,
       width: entry.width,
       height: entry.height,
+      multi_mode: selectedMultiMode,
       prompt_override: regenPromptEl.classList.contains("hidden") ? undefined : regenPromptEl.value.trim(),
     };
     try {
@@ -1946,6 +1997,7 @@ batchForm.addEventListener("submit", async (e) => {
     override_skin: bOverrideSkin ? bOverrideSkin.value : undefined,
     override_costume: bOverrideCostume ? bOverrideCostume.value : undefined,
     override_art_style: bOverrideArtStyle ? bOverrideArtStyle.value : undefined,
+    multi_mode: bMultiMode ? bMultiMode.value : undefined,
     sort: batchSortSelect.value || null,
     rating: batchRatingSelect ? (batchRatingSelect.value || null) : null,
     lucky: batchLuckyCheckbox.checked,

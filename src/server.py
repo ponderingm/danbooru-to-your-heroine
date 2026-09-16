@@ -124,6 +124,8 @@ class ConvertRequest(BaseModel):
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
     override_art_style: Optional[str] = None
+    # 複数人構図戦略: "capsule" (デフォルト/C) / "flat" (A: v2ライク) / "shared_costume" (B: 衣装共有)
+    multi_mode: Optional[str] = "capsule"
     search_query: Optional[str] = None
 
 
@@ -200,7 +202,8 @@ def _convert(req: ConvertRequest):
     )
     identity_tags, situation_tags, _removed = res[0], res[1], res[2]
     extra_neg = getattr(res, "extra_negative_tags", [])
-    base_prompt = build_prompt(identity_tags, situation_tags, model_type=model, heroine_name=heroine)
+    multi_mode = getattr(req, "multi_mode", "capsule") or "capsule"
+    base_prompt = build_prompt(identity_tags, situation_tags, model_type=model, heroine_name=heroine, multi_mode=multi_mode)
     booru_prompt = adapt_prompt(base_prompt, model_type=model)
 
     raw_prompt_heroine = None
@@ -477,6 +480,7 @@ def _do_generate(req: GenerateRequest) -> dict:
         "override_skin": req.override_skin,
         "override_costume": req.override_costume,
         "override_art_style": req.override_art_style,
+        "multi_mode": getattr(req, "multi_mode", "capsule"),
         "files": saved_files,
         "image_urls": [f"/output/{fn}" for fn in saved_files],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1070,6 +1074,7 @@ class BatchConfig(BaseModel):
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
     override_art_style: Optional[str] = None
+    multi_mode: Optional[str] = "capsule"
 
 
 BATCH_LOCK = threading.Lock()
@@ -1199,6 +1204,7 @@ def _batch_worker_loop(cfg: BatchConfig, run_id: str) -> None:
                     override_skin=cfg.override_skin,
                     override_costume=cfg.override_costume,
                     override_art_style=cfg.override_art_style,
+                    multi_mode=getattr(cfg, "multi_mode", "capsule"),
                     use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                     width=cfg.width, height=cfg.height, timeout=cfg.timeout,
                     search_query=cfg.search,
