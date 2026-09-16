@@ -147,6 +147,9 @@ def reload_config() -> None:
     CENSORING_BLACKLIST = {t.replace("_", " ").lower() for t in BASE_RULES.get("artifact_purge", [])}
     BREAST_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("breasts", [])}
     SKIN_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("skin", [])}
+    HAIR_COLOR_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("hair_color", [])}
+    HAIR_STYLE_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("hair_style", [])}
+    EYE_COLOR_TAGS = {t.replace("_", " ").lower() for t in CHARACTER_IDENTITY_BLACKLIST.get("eye_color", [])}
     MONSTER_SKIN_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("monster_skin_tags", [])}
     HUMAN_SKIN_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("human_skin_tags", [])}
     DARK_SKIN_TAGS = {t.replace("_", " ").lower() for t in BASE_RULES.get("dark_skin_tags", [])}

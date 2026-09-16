@@ -25,16 +25,6 @@ MALE_ATTR_KEYWORDS: Set[str] = {
     "erection", "ejaculation", "condom", "male focus"
 }
 
-# ヒロインDNA置換時にも絶対に誤消去してはならない一般身体部位・露出・メイク・装飾タグ
-GENERAL_BODY_PRESERVE_TAGS: Set[str] = {
-    "thighs", "armpits", "collarbone", "bare shoulders", "bare arms", "bare legs",
-    "cleavage", "sideboob", "underboob", "navel", "fingernails", "long fingernails",
-    "nail polish", "pink nails", "black nails", "red nails",
-    "makeup", "lipstick", "pink lips", "red lips", "eyeshadow", "body blush",
-    "stomach", "midriff", "legs", "feet", "toes", "back", "butt", "ass",
-    "groin", "pubic hair", "crotch",
-}
-
 
 def is_multi_subject(tags: List[str]) -> bool:
     """プロンプトまたはタグリストに複数人（特に1girl + 1boyなど）が含まれるかを判定する"""
@@ -98,22 +88,10 @@ def separate_multi_subject_tags(
                 common_meta_slots.append(t)
             continue
 
-        # 身体・顔・髪
-        if parent == "character_dna":
-            # 一般身体部位・露出・メイク・装飾タグはアクション・身体スロットとして保持
-            if low_t in GENERAL_BODY_PRESERVE_TAGS:
-                common_action_slots.append(t)
-                continue
-            # 元絵の女性身体属性（ヒロインDNAと競合するもの）は置換されるためスキップ
-            continue
-
-        # 衣装・装飾
-        if parent in ("costume", "accessories"):
-            common_action_slots.append(t)
-            continue
-
-        # アクション・ポーズ・構図
-        if parent == "action_pose":
+        # 身体・顔・髪・衣装・装飾・アクション・ポーズ・構図
+        # ※ mutate_tags_to_heroine 後のタグなので、残っている身体描写（太もも、鎖骨等）や
+        # 衣装・小道具はすべて共通アクション・身体スロットとして自然に保持する
+        if parent in ("character_dna", "costume", "accessories", "action_pose"):
             common_action_slots.append(t)
             continue
 

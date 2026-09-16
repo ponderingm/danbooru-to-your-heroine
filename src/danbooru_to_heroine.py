@@ -39,17 +39,10 @@ META_TAG_BLACKLIST = getattr(config, "META_TAG_BLACKLIST", set())
 QUALITY_TAGS = getattr(config, "QUALITY_TAGS", set())
 BREAST_TAGS = getattr(config, "BREAST_TAGS", set())
 SKIN_TAGS = getattr(config, "SKIN_TAGS", set())
+HAIR_COLOR_TAGS = getattr(config, "HAIR_COLOR_TAGS", set())
+HAIR_STYLE_TAGS = getattr(config, "HAIR_STYLE_TAGS", set())
+EYE_COLOR_TAGS = getattr(config, "EYE_COLOR_TAGS", set())
 CENSORING_BLACKLIST = getattr(config, "CENSORING_BLACKLIST", set())
-
-# ヒロインDNA置換時にも絶対に誤消去してはならない一般身体部位・露出・メイク・装飾タグ
-GENERAL_BODY_PRESERVE_TAGS = {
-    "thighs", "armpits", "collarbone", "bare shoulders", "bare arms", "bare legs",
-    "cleavage", "sideboob", "underboob", "navel", "fingernails", "long fingernails",
-    "nail polish", "pink nails", "black nails", "red nails",
-    "makeup", "lipstick", "pink lips", "red lips", "eyeshadow", "body blush",
-    "stomach", "midriff", "legs", "feet", "toes", "back", "butt", "ass",
-    "groin", "pubic hair", "crotch",
-}
 
 # Danbooruのratingフィールド(g/s/q/e) → Illustrious系モデルが学習済みのratingタグ
 RATING_TAG_MAP = {
@@ -390,6 +383,9 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     dark_skin_set = getattr(config, "DARK_SKIN_TAGS", set())
     art_style_set = build_art_style_set()
     heroine_slots = dna.get("slots", {})
+    heroine_has_hair_color = any(k.startswith("character_dna.hair.color") for k in heroine_slots)
+    heroine_has_hair_style = any(k.startswith("character_dna.hair.style") or k.startswith("character_dna.hair.feature") for k in heroine_slots)
+    heroine_has_eye_color = any(k.startswith("character_dna.face.eyes") for k in heroine_slots)
     clean_general = [t.replace("_", " ").lower().strip() for t in general_tags if t.strip()]
     tag_slots = classifier.classify_tags(clean_general, fallback_llm=False)
 
@@ -460,27 +456,22 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                 removed_tags.append(tag_norm)
                 continue
 
-        # 5. v3 スロット駆動DNA置換
-        # 元絵タグのスロットがヒロインDNAのスロットと競合する場合、自動的に元絵属性を除去・置換する
-        slot = tag_slots.get(tag_norm)
-        if slot and slot.startswith("character_dna."):
-            # 一般身体部位・露出・メイク・装飾タグは保護（DNA置換の巻き添えにしない）
-            if tag_norm not in GENERAL_BODY_PRESERVE_TAGS:
-                # 男性側属性（short black hair, penis等）は誤消去しないよう保護
-                if not any(kw in tag_norm for kw in ("boy", "male", "man", "penis", "beard")):
-                    # 直接競合するDNAスロット（髪、胸、肌色、瞳色）のみ置換対象
-                    slot_prefix = ".".join(slot.split(".")[:3])  # 例: character_dna.hair.color
-                    if slot_prefix in (
-                        "character_dna.hair.color",
-                        "character_dna.hair.style",
-                        "character_dna.hair.feature",
-                        "character_dna.body.breasts",
-                        "character_dna.body.skin",
-                        "character_dna.face.eyes",
-                    ):
-                        if any(k.startswith(slot_prefix) for k in heroine_slots):
-                            removed_tags.append(tag_norm)
-                            continue
+        # 5. ヒロインDNA排他属性の置換判定 (Mutually Exclusive Attribute Replacement)
+        # ヒロインDNAに該当属性が定義されている場合のみ、同カテゴリの元絵排他タグを除去する
+        # ※ 男性特有の属性（short black hair, penis等）は誤消去しないよう保護
+        if not any(kw in tag_norm for kw in ("boy", "male", "man", "penis", "beard")):
+            # 髪色 (Hair Color)
+            if heroine_has_hair_color and tag_norm in HAIR_COLOR_TAGS:
+                removed_tags.append(tag_norm)
+                continue
+            # 髪型・髪の長さ (Hair Style / Length / Feature)
+            if heroine_has_hair_style and tag_norm in HAIR_STYLE_TAGS:
+                removed_tags.append(tag_norm)
+                continue
+            # 目の色 (Eye Color: ヒロイン定義に瞳色がある場合のみ置換、未定義なら元絵の瞳色を尊重)
+            if heroine_has_eye_color and tag_norm in EYE_COLOR_TAGS:
+                removed_tags.append(tag_norm)
+                continue
 
         situation_tags.append(tag.replace("_", " "))
 
