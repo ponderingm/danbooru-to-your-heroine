@@ -8,6 +8,7 @@ YAML設定ファイル (config.yaml) および公式ベースルール (rules/de
 設定の実体を `config.yaml` 単一ファイルへ集約する。
 """
 
+import os
 from pathlib import Path
 from typing import Any, Dict, Set
 import yaml
@@ -93,8 +94,8 @@ def reload_config() -> None:
     OLLAMA_MODEL = USER_CONFIG.get("ollama_model", "qwen2.5:latest")
 
     CORS_ORIGINS = USER_CONFIG.get("cors_origins", ["https://danbooru.donmai.us", "https://gelbooru.com"])
-    API_HOST = USER_CONFIG.get("api_host", "0.0.0.0")
-    API_PORT = int(USER_CONFIG.get("api_port", 8899))
+    API_HOST = os.environ.get("API_HOST") or os.environ.get("HOST") or USER_CONFIG.get("api_host", "0.0.0.0")
+    API_PORT = int(os.environ.get("API_PORT") or os.environ.get("PORT") or USER_CONFIG.get("api_port", 8899))
 
     discord_cfg = USER_CONFIG.get("discord", {})
     DISCORD_WEBHOOK_URL = discord_cfg.get("webhook_url", "")
