@@ -1,9 +1,10 @@
+import os
 import urllib.request
 import urllib.error
 import json
 import time
 
-TOKEN = "5|i4xcNLJ8ZWYfNEqln2aSOQiHGdahsoX2gOSGBwLB976e1178"
+TOKEN = os.environ.get("COOLIFY_TOKEN", "")
 BASE = "http://127.0.0.1:8000/api/v1"
 APP_UUID = "jfmbv96dl10h6obh1g25jlzz"
 

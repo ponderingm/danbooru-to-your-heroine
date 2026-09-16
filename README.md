@@ -51,6 +51,8 @@ danbooru-to-your-heroine/
 │   ├── heroine_helper.py               # Booru統計解析によるヒロインDNA自動サジェスト
 │   ├── notify.py                       # Discord通知エンジン（ログレベル・画像添付）
 │   ├── server.py                       # FastAPI APIサーバー（ジョブキュー・各種API）
+│   ├── cooccurrence_finder.py          # 共起の輪ファインダー（逆頻度IDF特異性スコア算出）
+│   ├── natural_to_danbooru.py          # 自然言語➜Booruタグ変換エンジン（LLM連携）
 │   ├── rules/
 │   │   └── default_rules.yaml          # 公式Baseルール辞書（Git管理・共有資産）
 │   ├── prompts/                        # LLM用プロンプト・指示書（Markdown管理）
@@ -312,10 +314,11 @@ uv run uvicorn server:app --app-dir src --host 0.0.0.0 --port 8899 --reload
 | `POST` | `/heroines/save` | ヒロイン定義を保存・更新（`config.yaml` に永続化） |
 | `DELETE` | `/heroines/{key}` | 指定ヒロインを削除 |
 | `POST` | `/convert` | URLから換装プロンプトを構築（画像生成なし・プレビュー用） |
-| `POST` | `/generate` | 優先度付きキューへ画像生成ジョブを投入（即座に `job_id` を返却） |
+| `POST` | `/generate` | 優先度付きキューへ画像生成ジョブを投入（即座に `job_id` を返却、`filename_prefix` 指定可） |
 | `GET` | `/jobs/{job_id}` | ジョブの状態（`queued`/`running`/`done`/`error`）と結果を取得 |
 | `GET` | `/images` | 生成済み履歴（マニフェスト）。ヒロイン・モデル・日付・タグ絞り込み対応 |
 | `DELETE` | `/images/{entry_id}` | 生成履歴エントリおよび画像実体を削除 |
+| `POST` | `/posts/search` | 指定プロバイダから投稿を検索・高度なカテゴリ判定＆Tierスコア選定 |
 | `POST` | `/generated_posts` | 指定投稿ID群が生成済みかどうかを一括判定（拡張機能のバッジ用） |
 | `POST` | `/batch/start` | 検索条件に基づく自動バッチ生成ワーカーを開始 |
 | `POST` | `/batch/stop` | 自動バッチ生成ワーカーを停止 |
@@ -452,6 +455,9 @@ docker compose up --build -d
 - ✅ **完了**: 一時オーバーライド制御（胸・肌・衣装・画風・絵師）
 - ✅ **完了**: ComfyUI死活監視ステータス表示
 - ✅ **完了**: Tampermonkeyスクリプトの4サイト対応 (v2.1.0)
+- ✅ **完了**: タグ共起継承ファインダー ＆ 希少性特異性スコア（IDF）算出エンジン（`cooccurrence_finder.py`）
+- ✅ **完了**: 統一Booru検索API ＆ 高度カテゴリ・Tier選定フィルタ（`/posts/search`）
+- ✅ **完了**: 自然言語によるBooru検索プロンプト変換連携（`natural_to_danbooru.py`）
 - 📌 **今後の検討・拡張アイデア**:
   - **ComfyUI カスタムノード化 (`ComfyUI-Danbooru-To-Heroine`)**: 外部サーバーを起動せず、ComfyUIワークフロー内でURL/IDから直接ノード上でヒロイン置換を行う単体パッケージ化。
   - **生成失敗時の自動リトライ・再接続機構**: ネットワーク瞬断やComfyUI一時エラーに対する自動復帰ハンドリング。
