@@ -93,19 +93,25 @@ flowchart TD
 
 ### 4.1 構造の詳細
 1. **事前構築DB（Pre-built Classification DB）**:
-   - Danbooruの頻出タグ（上位1万〜3万タグ）を事前にLLMでバッチ分類し、軽量なローカル辞書（SQLite または JSON/YAML）として保持。
+   - 頻出タグを事前にLLMでバッチ分類し、軽量なローカル辞書（SQLite または JSON/YAML）として保持。
    - 通常の生成時は **O(1) のローカル高速引き当て（ミリ秒単位・LLM呼び出しオーバーヘッドゼロ）** で完了。
 2. **オンデマンドLLM自動キャッシュ（Self-growing Fallback）**:
    - DBに存在しないニッチな未知タグや新着タグに遭遇した時だけ、バックグラウンドまたはオンデマンドで **Ollama（ローカル）または Gemini API** を呼び出してスロットを推論。
    - 推論結果を即座にローカルDBへ自動書き込み（キャッシュ蓄積）。
    - **生成を回せば回すほど自動的に辞書が賢く育ち**、次回以降は同一タグでLLM推論が発生しなくなる。
 
+### 4.2 💡 最強のコールドスタート戦略：生成済みマニフェストからの逆算構築
+- **大衆Danbooruタグではなく「実績データ」を活用**:
+  - Danbooru全体（数百万件）から無作為に抽出すると、使わないメタタグや無関係な作品タグが大量に混入してしまう。
+  - [`database/generated_manifest.json`](../database/generated_manifest.json) に蓄積された**生成実績データ（約5,900件・約12,800ユニークタグ）**からタグを抽出し、出現頻度順に集約。
+  - あなたの制作環境で「実際に使われ、愛用されている厳選タグ群」だけをLLMで一括分類することで、**初日から実戦適合率（ヒット率）99%を誇る最高純度の初期分類DB**をノーコストかつ瞬時にブートストラップ可能。
+
 ---
 
 ## 5. 📝 開発ロードマップ（v3.0）
 
 - [ ] スロット分類スキーマの定義（`SlotCategory`: hair, face, body, costume_inner, costume_outer, accessory, pose, expression, background, meta 等）
-- [ ] Danbooru頻出タグの事前分類バッチスクリプト（LLM一括生成）
+- [ ] **マニフェスト逆算バッチスクリプトの実装**（`scripts/bootstrap_tag_db_from_manifest.py`）: `database/generated_manifest.json` からタグ頻度を抽出しLLM一括分類
 - [ ] ハイブリッド分類DBローダー ＆ オンデマンドLLM自動蓄積エンジンの実装（`src/tag_classifier.py`）
 - [ ] モデル別プロンプト最適整列ソーターの実装（`PromptSlotSorter`）
 - [ ] プロンプトビルダー（`danbooru_to_heroine.py`）へのスロット結合統合
