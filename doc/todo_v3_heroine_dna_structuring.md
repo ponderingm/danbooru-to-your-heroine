@@ -106,13 +106,19 @@ flowchart TD
 ```
 
 ### 4.1 構造の詳細
-1. **事前構築DB（Pre-built Classification DB）**:
-   - 頻出タグを事前にLLMでバッチ分類し、軽量なローカル辞書（SQLite または JSON/YAML）として保持。
-   - 通常の生成時は **O(1) のローカル高速引き当て（ミリ秒単位・LLM呼び出しオーバーヘッドゼロ）** で完了。
-2. **オンデマンドLLM自動キャッシュ（Self-growing Fallback）**:
-   - DBに存在しないニッチな未知タグや新着タグに遭遇した時だけ、バックグラウンドまたはオンデマンドで **Ollama（ローカル）または Gemini API** を呼び出してスロットを推論。
-   - 推論結果を即座にローカルDBへ自動書き込み（キャッシュ蓄積）。
-   - **生成を回せば回すほど自動的に辞書が賢く育ち**、次回以降は同一タグでLLM推論が発生しなくなる。
+1. **Base層 ＆ User層の2層ストレージ設計**:
+   - **Base層（Git管理・共通資産）: `src/rules/tags_classification_base.json`**
+     - マニフェストから分類した約1万件のマスター辞書。クローンした誰もが最初から使える共通の軽量JSON辞書。
+   - **User層（非公開・.gitignore対象）: `database/tags_classification_cache.json`**
+     - 個人の生成運用中にオンデマンドLLM推論によって自動追記される未知タグの自己増殖キャッシュ。
+   - 実行時に両者をマージしてメモリ展開（ハッシュマップ）し、**$O(1)$・数ミリ秒で即座に引き当て**。
+2. **1タグ ＝ 1スロット（Primary Path）の原則**:
+   - 複合タグ（例: `striped_bikini`）は最も支配的な単一スロット（例: `costume.inner`）へ割り当て、二重計上やソート時の重複バグを完全防止。
+3. **Chunkingバッチ分類戦略（50〜100タグ一括）**:
+   - 12,800個のタグを1件ずつ投げるのではなく、50〜100件を1つのLLMプロンプトにまとめてJSON構造で一括返却させる。
+   - 約130〜200リクエストで完了し、Gemini APIなら数分で初期DBが完成。
+4. **v2ヒロイン設定との完全後方互換性**:
+   - 従来のカンマ区切りフラット文字列も、この分類DBを通すことで自動的にスロット構造へ昇華させるアダプタを搭載。過去の設定を壊さずシームレスに移行可能。
 
 ### 4.2 💡 最強のコールドスタート戦略：生成済みマニフェストからの逆算構築
 - **大衆Danbooruタグではなく「実績データ」を活用**:
@@ -124,10 +130,10 @@ flowchart TD
 
 ## 5. 📝 開発ロードマップ（v3.0）
 
-- [ ] スロット分類スキーマの定義（`SlotCategory`: hair, face, body, costume_inner, costume_outer, accessory, pose, expression, background, meta 等）
-- [ ] **マニフェスト逆算バッチスクリプトの実装**（`scripts/bootstrap_tag_db_from_manifest.py`）: `database/generated_manifest.json` からタグ頻度を抽出しLLM一括分類
-- [ ] ハイブリッド分類DBローダー ＆ オンデマンドLLM自動蓄積エンジンの実装（`src/tag_classifier.py`）
-- [ ] モデル別プロンプト最適整列ソーターの実装（`PromptSlotSorter`）
-- [ ] プロンプトビルダー（`danbooru_to_heroine.py`）へのスロット結合統合
-- [ ] WebUIのヒロイン設定タブでのスロット別チップエディタUI実装
+- [ ] **Step 1: LLM分類用システムプロンプトの作成** (`src/prompts/tag_classification_system_instruction.md`)
+- [ ] **Step 2: マニフェスト逆算バッチスクリプトの実装** (`scripts/bootstrap_tag_db_from_manifest.py`): `database/generated_manifest.json` からタグ頻度を抽出しLLM一括分類して `src/rules/tags_classification_base.json` を生成
+- [ ] **Step 3: ハイブリッド分類DBローダー ＆ オンデマンド自動蓄積エンジンの実装** (`src/tag_classifier.py`)
+- [ ] **Step 4: モデル別プロンプト最適整列ソーターの実装** (`src/prompt_sorter.py`)
+- [ ] **Step 5: プロンプトビルダー（`danbooru_to_heroine.py`）へのスロット結合 ＆ 後方互換アダプタ**
+- [ ] **Step 6: WebUIのヒロイン設定タブでのスロット別チップエディタUI実装**
 
