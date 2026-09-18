@@ -47,6 +47,8 @@ import itertools
 import json
 import os
 import queue
+import re
+import subprocess
 import threading
 import time
 import uuid
@@ -69,6 +71,7 @@ from danbooru_to_heroine import (
 )
 
 from model_adapter import adapt_prompt, get_negative_prompt, RATING_TAG_ALIASES
+from tag_classifier import classifier
 from comfy_client import (
     COMFYUI_URL, CUSTOM_COMFY_URL, ANIMA_COMFY_URL,
     compute_canvas_size, build_workflow_for_backend, resolve_backend, list_backends,
@@ -85,6 +88,9 @@ from site_adapters import UnifiedPost
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST_PATH = os.path.join(PROJECT_ROOT, "database", "generated_manifest.json")
 MANIFEST_LOCK = threading.Lock()
+APP_VERSION = "v3.0.0"
+REPO_URL = "https://github.com/ponderingm/danbooru-to-your-heroine"
+GIT_TIMEOUT_SEC = 2
 
 app = FastAPI(title="danbooru-to-your-heroine API")
 
@@ -119,6 +125,8 @@ class ConvertRequest(BaseModel):
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
     override_art_style: Optional[str] = None
+    # 複数人構図戦略: "capsule" (デフォルト/C) / "flat" (A: v2ライク) / "shared_costume" (B: 衣装共有)
+    multi_mode: Optional[str] = "capsule"
     search_query: Optional[str] = None
 
 
@@ -195,7 +203,8 @@ def _convert(req: ConvertRequest):
     )
     identity_tags, situation_tags, _removed = res[0], res[1], res[2]
     extra_neg = getattr(res, "extra_negative_tags", [])
-    base_prompt = build_prompt(identity_tags, situation_tags)
+    multi_mode = getattr(req, "multi_mode", "capsule") or "capsule"
+    base_prompt = build_prompt(identity_tags, situation_tags, model_type=model, heroine_name=heroine, multi_mode=multi_mode)
     booru_prompt = adapt_prompt(base_prompt, model_type=model)
 
     raw_prompt_heroine = None
@@ -221,6 +230,7 @@ def _convert(req: ConvertRequest):
         selected_prompt = booru_prompt
 
     detected_model = (post.generation_meta or {}).get("detected_model", "") if isinstance(post, UnifiedPost) else ""
+    slots_map = classifier.classify_tags(identity_tags + situation_tags, fallback_llm=False)
 
     extras = {
         "booru_prompt": booru_prompt,
@@ -228,7 +238,11 @@ def _convert(req: ConvertRequest):
         "hybrid_prompt": hybrid_prompt,
         "has_raw_prompt": bool(raw_prompt),
         "detected_model": detected_model,
+        "identity_tags": identity_tags,
+        "situation_tags": situation_tags,
         "removed_tags": _removed,
+        "slots": slots_map,
+        "multi_mode": multi_mode,
         "extra_negative_tags": extra_neg,
     }
     return post, heroine, selected_prompt, model, extras
@@ -472,6 +486,11 @@ def _do_generate(req: GenerateRequest) -> dict:
         "override_skin": req.override_skin,
         "override_costume": req.override_costume,
         "override_art_style": req.override_art_style,
+        "multi_mode": getattr(req, "multi_mode", "capsule"),
+        "identity_tags": extras.get("identity_tags", []),
+        "situation_tags": extras.get("situation_tags", []),
+        "removed_tags": extras.get("removed_tags", []),
+        "slots": extras.get("slots", {}),
         "files": saved_files,
         "image_urls": [f"/output/{fn}" for fn in saved_files],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1065,6 +1084,7 @@ class BatchConfig(BaseModel):
     override_skin: Optional[str] = None
     override_costume: Optional[str] = None
     override_art_style: Optional[str] = None
+    multi_mode: Optional[str] = "capsule"
 
 
 BATCH_LOCK = threading.Lock()
@@ -1194,6 +1214,7 @@ def _batch_worker_loop(cfg: BatchConfig, run_id: str) -> None:
                     override_skin=cfg.override_skin,
                     override_costume=cfg.override_costume,
                     override_art_style=cfg.override_art_style,
+                    multi_mode=getattr(cfg, "multi_mode", "capsule"),
                     use_custom=cfg.use_custom, checkpoint=cfg.checkpoint, backend=cfg.backend,
                     width=cfg.width, height=cfg.height, timeout=cfg.timeout,
                     search_query=cfg.search,
@@ -1504,6 +1525,53 @@ def update_site_auth_config(req: SiteAuthConfigRequest):
         gelbooru_api_key=req.gelbooru_api_key,
     )
     return {"status": "ok"}
+
+
+@app.get("/version")
+def get_version():
+    """バージョン情報・Gitコミット・ブランチ・デプロイ環境種別を返す"""
+    commit = os.environ.get("SOURCE_COMMIT") or os.environ.get("GIT_COMMIT")
+    if not commit:
+        try:
+            res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=GIT_TIMEOUT_SEC)
+            if res.returncode == 0:
+                commit = res.stdout.strip()
+        except Exception:
+            pass
+    commit = commit or "unknown"
+    short_commit = commit[:7] if commit != "unknown" else "unknown"
+
+    branch = os.environ.get("COOLIFY_BRANCH")
+    if not branch:
+        try:
+            res = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, timeout=GIT_TIMEOUT_SEC)
+            if res.returncode == 0:
+                branch = res.stdout.strip()
+        except Exception:
+            pass
+    branch = branch or "unknown"
+
+    container_name = os.environ.get("COOLIFY_CONTAINER_NAME", "")
+
+    # プレビュー環境判定 (PR ID 抽出)
+    pr_id = None
+    pr_match = re.search(r"pull/(\d+)/", branch) or re.search(r"-pr-(\d+)", container_name)
+    if pr_match:
+        pr_id = pr_match.group(1)
+
+    is_preview = bool(pr_id or "-pr-" in container_name or "pull/" in branch)
+
+    return {
+        "version": APP_VERSION,
+        "commit": short_commit,
+        "full_commit": commit,
+        "branch": branch,
+        "is_preview": is_preview,
+        "pr_id": pr_id,
+        "repo_url": REPO_URL,
+        "commit_url": f"{REPO_URL}/commit/{commit}" if commit != "unknown" else None,
+        "pr_url": f"{REPO_URL}/pull/{pr_id}" if pr_id else None,
+    }
 
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")

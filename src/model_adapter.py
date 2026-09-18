@@ -16,7 +16,7 @@ RATING_TAG_ALIASES = {anima: f"rating:{illustrious}" for illustrious, anima in A
 def _dedupe_tags(prompt: str) -> str:
     """カンマ区切りタグを大小無視で重複排除する（先勝ち、順序維持）。
     build_prompt()側のmasterpiece/best quality等と、各モデル分岐で追加するクオリティタグが
-    二重に入るのを防ぐ"""
+    二重に入るのを防ぐ。ただしチャンク分離記号の 'BREAK' は重複排除しない。"""
     seen = set()
     deduped = []
     for tag in prompt.split(","):
@@ -24,6 +24,9 @@ def _dedupe_tags(prompt: str) -> str:
         if not tag:
             continue
         key = tag.lower()
+        if key == "break":
+            deduped.append("BREAK")
+            continue
         if key not in seen:
             seen.add(key)
             deduped.append(tag)

@@ -22,6 +22,17 @@ import requests
 
 import config
 from site_adapters import resolve_adapter, fetch_unified_post, UnifiedPost
+from prompt_sorter import sorter
+from tag_classifier import classifier
+from multi_subject_adapter import (
+    is_multi_subject,
+    separate_multi_subject_tags,
+    build_illustrious_multi_prompt,
+    build_anima_multi_prompt,
+    MULTI_MODE_CAPSULE,
+    MULTI_MODE_FLAT,
+    MULTI_MODE_SHARED_COSTUME,
+)
 
 # ─────────────────────────────────────────────
 # 共通ルール・タグ分類（すべて rules/default_rules.yaml および config.py 由来）
@@ -31,6 +42,9 @@ META_TAG_BLACKLIST = getattr(config, "META_TAG_BLACKLIST", set())
 QUALITY_TAGS = getattr(config, "QUALITY_TAGS", set())
 BREAST_TAGS = getattr(config, "BREAST_TAGS", set())
 SKIN_TAGS = getattr(config, "SKIN_TAGS", set())
+HAIR_COLOR_TAGS = getattr(config, "HAIR_COLOR_TAGS", set())
+HAIR_STYLE_TAGS = getattr(config, "HAIR_STYLE_TAGS", set())
+EYE_COLOR_TAGS = getattr(config, "EYE_COLOR_TAGS", set())
 CENSORING_BLACKLIST = getattr(config, "CENSORING_BLACKLIST", set())
 
 # Danbooruのratingフィールド(g/s/q/e) → Illustrious系モデルが学習済みのratingタグ
@@ -102,32 +116,108 @@ def build_purge_set() -> set:
     return {t.replace("_", " ").lower() for t in getattr(config, "EXTRA_PURGE_TAGS", set())}
 
 
+def extract_heroine_slots(raw_dna: dict) -> Dict[str, str]:
+    """
+    新型ヒロイン定義 (v3 スロット構造化スキーマ) から {スロットパス: タグ名} の完全マッピングを展開する。
+    """
+    slots: Dict[str, str] = {}
+    if not isinstance(raw_dna, dict):
+        return slots
+
+    # 1. アイデンティティ (subject / meta)
+    ident = raw_dna.get("identity", {})
+    if isinstance(ident, dict):
+        if ident.get("character"):
+            slots["subject.character"] = str(ident["character"])
+        if ident.get("series"):
+            slots["meta_quality.series"] = str(ident["series"])
+        for extra in ident.get("extra", []):
+            slots[f"subject.extra.{extra}"] = str(extra)
+
+    # 2. ヒロインDNA (character_dna: hair / face / body)
+    dna_block = raw_dna.get("dna", {})
+    if isinstance(dna_block, dict):
+        # 髪 (hair)
+        hair = dna_block.get("hair", {})
+        if isinstance(hair, dict):
+            for k in ("color", "style", "feature"):
+                if hair.get(k):
+                    slots[f"character_dna.hair.{k}"] = str(hair[k])
+
+        # 顔 (face)
+        face = dna_block.get("face", {})
+        if isinstance(face, dict):
+            for k in ("eyes", "marks"):
+                if face.get(k):
+                    slots[f"character_dna.face.{k}"] = str(face[k])
+
+        # 身体 (body)
+        body = dna_block.get("body", {})
+        if isinstance(body, dict):
+            for k in ("skin", "breasts", "build", "marks"):
+                if body.get(k):
+                    slots[f"character_dna.body.{k}"] = str(body[k])
+
+    # 3. 衣装 (costume)
+    costume_block = raw_dna.get("costume", {})
+    if isinstance(costume_block, dict):
+        default_costume = costume_block.get("default", [])
+        if isinstance(default_costume, list):
+            for idx, c in enumerate(default_costume):
+                slots[f"costume.default.{idx}"] = str(c)
+        elif isinstance(default_costume, dict):
+            for k, v in default_costume.items():
+                if v:
+                    slots[f"costume.{k}"] = str(v)
+
+    return slots
+
+
 def build_known_character_tags() -> set:
-    """config.HEROINESの全identity_tags + config.OTHER_KNOWN_CHARACTER_TAGSを統合した既知キャラタグ集合"""
+    """config.HEROINESの全identity + config.OTHER_KNOWN_CHARACTER_TAGSを統合した既知キャラタグ集合"""
     tags = set(config.OTHER_KNOWN_CHARACTER_TAGS)
-    for dna in config.HEROINES.values():
-        for t in dna.get("identity_tags", []):
-            tags.add(t.replace("_", " ").lower())
+    for raw in config.HEROINES.values():
+        ident = raw.get("identity", {})
+        if isinstance(ident, dict):
+            for v in ident.values():
+                if isinstance(v, str):
+                    tags.add(v.replace("_", " ").lower())
+                elif isinstance(v, list):
+                    for x in v:
+                        tags.add(str(x).replace("_", " ").lower())
     return tags
 
 
 def get_heroine_dna(heroine: str) -> dict:
+    """ヒロイン名からv3構造化スロットおよび各種属性リストを展開して返却する"""
     if heroine and heroine in config.HEROINES:
-        return config.HEROINES[heroine]
-    if config.DEFAULT_HEROINE and config.DEFAULT_HEROINE in config.HEROINES:
-        return config.HEROINES[config.DEFAULT_HEROINE]
-    if config.HEROINES:
-        return next(iter(config.HEROINES.values()))
+        raw = config.HEROINES[heroine]
+    elif config.DEFAULT_HEROINE and config.DEFAULT_HEROINE in config.HEROINES:
+        raw = config.HEROINES[config.DEFAULT_HEROINE]
+    elif config.HEROINES:
+        raw = next(iter(config.HEROINES.values()))
+    else:
+        raw = {}
+
+    slots = extract_heroine_slots(raw)
+
+    identity_tags = [v for k, v in slots.items() if k.startswith("subject.") or k.startswith("meta_quality.series")]
+    face_tags = [v for k, v in slots.items() if k.startswith("character_dna.hair.") or k.startswith("character_dna.face.")]
+    body_tags = [v for k, v in slots.items() if k.startswith("character_dna.body.")]
+    costume_tags = [v for k, v in slots.items() if k.startswith("costume.")]
+
     return {
-        "name": heroine or "Unknown",
-        "identity_tags": [],
-        "face_tags": [],
-        "body_tags": [],
-        "costume_tags": [],
-        "override_rules": {},
-        "negative_tags": [],
-        "series_tags": [],
-        "artist_tags": [],
+        "name": raw.get("name", heroine or "Unknown"),
+        "raw": raw,
+        "slots": slots,
+        "identity_tags": identity_tags,
+        "face_tags": face_tags,
+        "body_tags": body_tags,
+        "costume_tags": costume_tags,
+        "override_rules": raw.get("override_rules", {}),
+        "negative_tags": raw.get("negative_tags", []),
+        "artist_tags": raw.get("artist_tags", []),
+        "default_backend": raw.get("default_backend"),
     }
 
 
@@ -295,6 +385,12 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
     human_skin_set = getattr(config, "HUMAN_SKIN_TAGS", set())
     dark_skin_set = getattr(config, "DARK_SKIN_TAGS", set())
     art_style_set = build_art_style_set()
+    heroine_slots = dna.get("slots", {})
+    heroine_has_hair_color = any(k.startswith("character_dna.hair.color") for k in heroine_slots)
+    heroine_has_hair_style = any(k.startswith("character_dna.hair.style") or k.startswith("character_dna.hair.feature") for k in heroine_slots)
+    heroine_has_eye_color = any(k.startswith("character_dna.face.eyes") for k in heroine_slots)
+    clean_general = [t.replace("_", " ").lower().strip() for t in general_tags if t.strip()]
+    tag_slots = classifier.classify_tags(clean_general, fallback_llm=False)
 
     # 一般タグ → ブラックリスト・パージタグ除去 → 構図・服装として保持
     for tag in general_tags:
@@ -363,6 +459,23 @@ def mutate_tags_to_heroine(post: Union[UnifiedPost, dict], heroine: str = None,
                 removed_tags.append(tag_norm)
                 continue
 
+        # 5. ヒロインDNA排他属性の置換判定 (Mutually Exclusive Attribute Replacement)
+        # ヒロインDNAに該当属性が定義されている場合のみ、同カテゴリの元絵排他タグを除去する
+        # ※ 男性特有の属性（short black hair, penis等）は誤消去しないよう保護
+        if not any(kw in tag_norm for kw in ("boy", "male", "man", "penis", "beard")):
+            # 髪色 (Hair Color)
+            if heroine_has_hair_color and tag_norm in HAIR_COLOR_TAGS:
+                removed_tags.append(tag_norm)
+                continue
+            # 髪型・髪の長さ (Hair Style / Length / Feature)
+            if heroine_has_hair_style and tag_norm in HAIR_STYLE_TAGS:
+                removed_tags.append(tag_norm)
+                continue
+            # 目の色 (Eye Color: ヒロイン定義に瞳色がある場合のみ置換、未定義なら元絵の瞳色を尊重)
+            if heroine_has_eye_color and tag_norm in EYE_COLOR_TAGS:
+                removed_tags.append(tag_norm)
+                continue
+
         situation_tags.append(tag.replace("_", " "))
 
     # ヒロインDNAの組み立て（顔・体・衣装の3大カテゴリ）
@@ -419,12 +532,29 @@ def escape_tag_parentheses(tag: str) -> str:
     return tag
 
 
-def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list = None) -> str:
+def build_prompt(
+    identity_tags: list,
+    situation_tags: list,
+    quality_prefix: list = None,
+    model_type: str = "illustrious",
+    heroine_name: str = "",
+    multi_mode: str = MULTI_MODE_CAPSULE,
+) -> str:
     if quality_prefix is None:
         quality_prefix = ["masterpiece", "best quality", "highly detailed"]
 
     purge_set = build_purge_set()
     filtered_situation = [t for t in situation_tags if t.replace("_", " ").lower() not in purge_set]
+
+    # 1. 複数人構図判定（1girl 1boy / 2girls 等）
+    if is_multi_subject(filtered_situation):
+        separated = separate_multi_subject_tags(raw_tags=filtered_situation, heroine_dna_tags=identity_tags)
+        if "anima" in model_type.lower():
+            return build_anima_multi_prompt(separated, heroine_name=heroine_name, mode=multi_mode)
+        else:
+            return build_illustrious_multi_prompt(separated, mode=multi_mode)
+
+    # 2. ソロ構図: 黄金順ソート（75トークン内に主要ヒロインDNAを集約）
     quality_in_situation = [t for t in filtered_situation if t.lower() in QUALITY_TAGS]
     rest_situation = [t for t in filtered_situation if t.lower() not in QUALITY_TAGS]
 
@@ -433,11 +563,12 @@ def build_prompt(identity_tags: list, situation_tags: list, quality_prefix: list
         if t not in all_quality:
             all_quality.append(t)
 
-    parts = all_quality + identity_tags + rest_situation
+    # セマンティックスロット順（黄金順）に最適ソート
+    sorted_tags = sorter.sort_tags(all_quality + identity_tags + rest_situation, model=model_type)
 
     seen = set()
     deduped = []
-    for p in parts:
+    for p in sorted_tags:
         escaped_p = escape_tag_parentheses(p)
         key = escaped_p.lower()
         if key not in seen:

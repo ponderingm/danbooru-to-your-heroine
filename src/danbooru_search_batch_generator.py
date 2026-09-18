@@ -276,8 +276,9 @@ def process_post(post: dict, idx: int, total: int, search_slug: str, negative_te
         post, heroine=heroine, include_artist=include_artist, artist_mode=artist_mode,
         custom_artist=custom_artist,
     )
-    base_prompt = build_prompt(identity_tags, situation_tags)
-    prompt_text = adapt_prompt(base_prompt, model_type=backend["model"])
+    model_type = backend.get("model", "illustrious")
+    base_prompt = build_prompt(identity_tags, situation_tags, model_type=model_type, heroine_name=heroine)
+    prompt_text = adapt_prompt(base_prompt, model_type=model_type)
 
     canvas_size = compute_canvas_size(post.get("image_width"), post.get("image_height")) if auto_canvas else None
     gen_width, gen_height = canvas_size if canvas_size else (width, height)
